@@ -4,15 +4,15 @@ import scipy.ndimage as ndi
 import skimage
 from skimage import segmentation, feature, morphology, filters, exposure, transform, measure
 import imageio
-import graphcuts
-import utils
+from . import graphcuts
+from . import utils
 import matplotlib.pyplot as plt
 plt.gray()
 import time
 import multiprocessing
 import os.path
 import shutil
-import partition
+from . import partition
 
 
 # Intialize the output list

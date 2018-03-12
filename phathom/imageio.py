@@ -1,5 +1,5 @@
 import tifffile
-import utils
+from . import utils
 import zarr
 
 

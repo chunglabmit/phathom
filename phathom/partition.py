@@ -1,11 +1,11 @@
 import numpy as np
 np.random.seed(123)
-import imageio
+from . import imageio
 from skimage.filters import threshold_otsu
 from skimage.util import crop
 import skimage
 import os.path
-import utils
+from . import utils
 from functools import reduce
 from operator import itemgetter
 import time
