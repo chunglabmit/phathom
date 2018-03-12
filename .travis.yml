@@ -1,32 +1,7 @@
 language: python
-env:
-   - PYTHON_VERSION="2.7"
-   - PYTHON_VERSION="3.5"
-before_install:
-   # Get the tag if it wasn't provided. Travis doesn't provide this if it isn't a tagged build.
-   - if [ -z $TRAVIS_TAG ]; then TRAVIS_TAG=`git tag --contains` ; fi
-   - echo $TRAVIS_TAG
-   # Move out of git directory to build root.
-   - cd ../..
-   - pwd
+python:
+   - 3.5
 install:
-   # Download and configure conda.
-   - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
-   - bash miniconda.sh -b -p $HOME/miniconda
-   - export PATH="$HOME/miniconda/bin:$PATH"
-   - conda config --set always_yes yes
-   - conda config --set show_channel_urls True
-   - source activate root
-   # Install basic conda dependencies.
-   - touch $HOME/miniconda/conda-meta/pinned
-   - echo "conda-build ==1.16.0" >> $HOME/miniconda/conda-meta/pinned
-   - conda update --all
-   - conda install conda-build
-   # Setup environment for testing and install all dependencies and our package.
-   - cd $TRAVIS_REPO_SLUG
-   - conda create --use-local -n testenv python=$PYTHON_VERSION
-   - source activate testenv
-   pip install .
    pip install nose
 script:
    nosetests tests
