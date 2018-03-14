@@ -6,8 +6,10 @@ import maxflow
 def poisson_pdf(x, mu):
     return poisson.pmf(x, mu)
 
+
 def information_gain(p):
     return np.exp(1-p)
+
 
 def hist(data, bins, _range):
     freq, edges = np.histogram(
@@ -19,8 +21,10 @@ def hist(data, bins, _range):
     width = edges[1]-edges[0]
     return left_edges, freq, width
 
+
 def find_nearest_T(T_target, Ts):
     return Ts[np.argmin(np.abs(Ts-T_target))]
+
 
 def fit_poisson_mixture(hist_output, T):
     # Only use bins for mu estimation
@@ -36,6 +40,7 @@ def fit_poisson_mixture(hist_output, T):
     obj_mu = np.sum(obj_levels*freq[obj_idx])/np.sum(freq[obj_idx])
     return back_mu, obj_mu
 
+
 def entropy(back_mu, obj_mu, T):
     # Use all grayscale levels in entropy calculation
     x_back = np.array(range(T))
@@ -49,6 +54,7 @@ def entropy(back_mu, obj_mu, T):
 
     H = np.sum(p_back*info_gain_back) + np.sum(p_obj*info_gain_obj)
     return H
+
 
 def max_entropy(data):
     assert data.dtype == 'uint8'
@@ -83,9 +89,11 @@ def max_entropy(data):
 
     return T_star, back_mu_star, obj_mu_star
 
+
 def histogram_penalty(x, mu_star):
     px = poisson_pdf(x, mu_star)
     return -np.log(px)
+
 
 def graph_cuts(data, R_back, R_obj, B=None, lambdaI=0, lambda_const=0):
     # Create a new graph
@@ -155,6 +163,7 @@ def graph_cuts(data, R_back, R_obj, B=None, lambdaI=0, lambda_const=0):
     sgm = g.get_grid_segments(node_ids)
 
     return sgm
+
 
 def run_graph_cuts(data, lambdaI, lambda_const):
 
