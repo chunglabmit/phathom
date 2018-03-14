@@ -44,3 +44,7 @@ phathom.egg-info/
 # IDE related #
 ###############
 .idea/
+
+# Local build of Documentation #
+################################
+_build/
