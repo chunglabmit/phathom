@@ -20,8 +20,8 @@ import os
 # -- Project information -----------------------------------------------------
 
 project = 'Phathom'
-copyright = '2018, Kwanghun Chung Lab'
-author = 'Kwanghun Chung Lab'
+copyright = '2018, Kwanghun Chung Lab, Massachusetts Institute of Technology'
+author = 'Justin Swaney and Lee Kamentsky'
 
 # The short X.Y version
 version = ''
@@ -39,8 +39,12 @@ release = '2018'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    'sphinx.ext.autodoc',
     'sphinx.ext.imgmath',
+    'sphinx.ext.autosummary',
+    'sphinx.ext.extlinks',
 ]
+
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
