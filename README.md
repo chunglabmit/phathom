@@ -1,6 +1,7 @@
 # Phathom
 
 [![Travis CI Status](https://travis-ci.org/chunglabmit/phathom.svg?branch=master)](https://travis-ci.org/chunglabmit/phathom)
+[![Documentation Status](https://readthedocs.org/projects/phathom/badge/)](http://phathom.readthedocs.io/en/latest/)
 
 Phathom is a Python package for analyzing terabyte-scale biological images.
 It relies on distributed computing to scale up image processing tasks that
