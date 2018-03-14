@@ -27,4 +27,4 @@ Phathom supports HPC environments using [SLURM][5].
 [5]: https://slurm.schedmd.com/
 
 ## Authors
-Phathom is maintained by members of the Kwanghun Chung Lab at MIT.
+Phathom is maintained by members of the [Kwanghun Chung Lab](http://www.chunglab.org/) at MIT.
