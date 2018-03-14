@@ -1,20 +1,22 @@
-import numpy as np
-np.random.seed(123)
 from . import imageio
+from . import utils
+import numpy as np
 from skimage.filters import threshold_otsu
 from skimage.util import crop
 import skimage
 import os.path
-from . import utils
-from functools import reduce
 from operator import itemgetter
 
 
+# Set consistent numpy random state
+np.random.seed(123)
+
+
 def random_chunks(img_path, seg_path, output_dir, nb_samples, shape, padding):
-    '''
+    """
     Extract random foreground-containing chunks from a large image.
     The large input image is loaded into memory.
-    '''
+    """
     img_name, _ = os.path.splitext(os.path.basename(img_path))
     utils.make_dir(output_dir)
     patch_dir = os.path.join(output_dir, 'patch')
@@ -31,10 +33,9 @@ def random_chunks(img_path, seg_path, output_dir, nb_samples, shape, padding):
     binary_seg = (seg > 0).astype('float32') # Boolean array
 
     # Random sample corresponds to top-left of the padded patch
-	# Copy=False gives discontiguous view of original data
+    # Copy=False gives discontiguous view of original data
     crop_width = tuple(zip((0,0,0), (s for s in padded_shape)))
     cropped_img = crop(img, crop_width=crop_width, copy=False)
-
 
     # Only sample patches with foreground pixels
     T = threshold_otsu(img)
@@ -64,9 +65,9 @@ def random_chunks(img_path, seg_path, output_dir, nb_samples, shape, padding):
 
 
 def sample_ground_truth(output_dir, input_dir, grdtruth_dir, nb_train, nb_val):
-    '''
+    """
     Sample pairs of input and outputs from expert system pipeline
-    '''
+    """
     input_paths, input_filenames = utils.tifs_in_dir(input_dir)
     grdtruth_paths, grdtruth_filenames = utils.tifs_in_dir(grdtruth_dir)
 
@@ -140,8 +141,6 @@ def chunk_img(img_path, output_dir, chunk_shape, overlap):
     metadata = dict()
     for i in metavars:
         metadata[i] = locals()[i]
-    metadata_csvpath = os.path.join(output_absdir, 'metadata.csv')
-    utils.dict_to_csv(metadata_csvpath, metadata)
     metadata_pklpath = os.path.join(output_absdir, 'metadata.pkl')
     utils.pickle_save(metadata_pklpath, metadata)
 
@@ -219,11 +218,6 @@ def main():
     chunk_dir = '../data/control/segmentation'
     output_img_path = '../data/control/segmentation.tif'
     combine_chunks(chunk_dir, output_img_path)
-
-    # input_dir = '../data/spim_crop/input/'
-    # grdtruth_dir = '../data/spim_crop/output/foreground'
-    # output_dir = '../data/spim_crop/'
-    # sample_ground_truth(input_dir=input_dir, grdtruth_dir=grdtruth_dir, output_dir=output_dir, nb_train=100, nb_val=20)
 
 
 if __name__ == '__main__':

@@ -1,22 +1,26 @@
+from . import partition
+from . import graphcuts
+from . import utils
+from . import imageio
 import numpy as np
-np.random.seed(123)
 import scipy.ndimage as ndi
 import skimage
 from skimage import segmentation, feature, morphology, filters, exposure, transform, measure
-import imageio
-from . import graphcuts
-from . import utils
 import matplotlib.pyplot as plt
-plt.gray()
-import time
 import multiprocessing
 import os.path
 import shutil
-from . import partition
 
 
-# Intialize the output list
+# Set default colormap to grayscale
+plt.gray()
+
+# Set consistent numpy random state
+np.random.seed(123)
+
+# Initialize the output list
 outputs = []
+
 
 def gradient(data):
     fz, fy, fx = np.gradient(data, edge_order=2)
@@ -26,12 +30,14 @@ def gradient(data):
     gradient[:,:,:,2] = fx
     return gradient
 
+
 def hessian_2d(data):
     l1 = np.zeros(data.shape)
     for i in range(data.shape[0]):
         img = data[i,:,:]
         Hyy, Hyx, Hxx = skimage.feature.hessian_matrix(img, sigma=1, mode='reflect')
         l1[i,:,:], l2 = skimage.feature.hessian_matrix_eigvals(Hyy, Hyx, Hxx)
+
 
 def hessian(data):
     grad = np.gradient(data)
@@ -46,6 +52,7 @@ def hessian(data):
                 H[:,:,:,j,i] = second_deriv
 
     return H
+
 
 def structure_tensor(grad):
     S = np.zeros((*grad.shape, 3))
@@ -63,14 +70,18 @@ def structure_tensor(grad):
     S[:,:,:,2,1] = fy*fx
     return S
 
+
 def add_output(name, data):
     outputs.append({'name': name, 'data': data})
+
+
 def write_output():
     if outputs:
         for d in outputs:
             name = d['name']
             print('saving {}'.format(name))
             imageio.imsave('../data/{}.tif'.format(d['name']), d['data'].astype('float32'))
+
 
 def weingarten(g):
     grad = gradient(g)
@@ -89,28 +100,33 @@ def weingarten(g):
     A = H*np.linalg.inv(B)/L
     return A
 
+
 def eigvalsh(A):
     return np.linalg.eigvalsh(A)
+
 
 def convex_seeds(eigvals):
     eig_neg = np.clip(eigvals, None, 0)
     det_neg = eig_neg.prod(axis=-1)
     return det_neg
 
+
 def positive_curvatures(eigvals):
     eig_pos = np.clip(eigvals, 0, None)
     pos_curv = np.linalg.norm(eig_pos, axis=-1)
     return pos_curv
 
+
 def seed_probability(eigen_seeds):
-    return (1-np.exp(-eigen_seeds**2/(2*eigen_seeds.std()**2)))
+    return 1-np.exp(-eigen_seeds**2/(2*eigen_seeds.std()**2))
+
 
 def regionprops(intensity_img, labels_img):
     # Get region statistics
     # print('Getting region statistics')
     verbose = False
     nb_regions = labels_img.max()
-    properties = measure.regionprops(lables_img, intensity_image=intensity_image)
+    properties = measure.regionprops(labels_img, intensity_image=intensity_img)
     centroids = np.zeros((nb_regions, 3))
     for i, region in enumerate(properties):
         # Shape based
@@ -141,6 +157,7 @@ def regionprops(intensity_img, labels_img):
             print(f'    Min intensity: {min_intensity:.3f}')
     return None
 
+
 def find_centroids(labels_img):
     nb_regions = labels_img.max()
     properties = measure.regionprops(labels_img)
@@ -148,6 +165,7 @@ def find_centroids(labels_img):
     for i, region in enumerate(properties):
         centroids[i] = region.centroid
     return centroids
+
 
 def segment(input_file, output_paths, upsample, sigma, h, T):
     # # Calculate the voxel dimensions after upsampling
@@ -236,6 +254,7 @@ def segment(input_file, output_paths, upsample, sigma, h, T):
     # Save the direction map
     # imageio.imsave(file=output_paths['direction_path'], data=norm_grad.astype('float32'))
 
+
 def segment_chunks(working_dir, nb_workers, upsampling, sigma, h, T):
     input_dir = os.path.join(working_dir, 'input/')
     foreground_dir = os.path.join(working_dir, 'foreground/')
@@ -263,10 +282,10 @@ def segment_chunks(working_dir, nb_workers, upsampling, sigma, h, T):
         pool.starmap(segment, args)
 
     # Copy over the metadata
-    shutil.copy(os.path.join(input_dir, 'metadata.csv'), segmentation_abspath)
     shutil.copy(os.path.join(input_dir, 'metadata.pkl'), segmentation_abspath)
 
     print('Done!')
+
 
 def main():
     # input_path = '../data/spim_crop/input/z00000_y00000_x00000.tif'

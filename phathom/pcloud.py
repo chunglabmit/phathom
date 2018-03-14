@@ -1,5 +1,4 @@
 import numpy as np
-np.random.seed(1)
 import scipy
 from scipy.ndimage import geometric_transform, map_coordinates
 from scipy.stats import multivariate_normal
@@ -9,9 +8,13 @@ import imageio
 from skimage import filters
 import multiprocessing
 import zarr
-
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+
+
+# Set consistent numpy random state
+np.random.seed(123)
+
 
 def plot_pts(pts1, pts2=None, candid1=None, candid2=None):
     fig = plt.figure()
@@ -44,17 +47,20 @@ def plot_pts(pts1, pts2=None, candid1=None, candid2=None):
     ax.legend()
     plt.show()
 
+
 def synthesize_pts(nb_pts, mean, sigma):
     covariance = np.diag(sigma**2)
     mn = multivariate_normal(mean=mean, cov=covariance)
     pts = mn.rvs(size=nb_pts)
     return pts
 
+
 def remove_random_pts(pts, frac):
     nb_pts = pts.shape[0]
     np.random.shuffle(pts)
     nb_missing = int(nb_pts*frac)
     return pts[:nb_pts-nb_missing]
+
 
 def get_transformation(zdeg, ydeg, xdeg):
     ztheta = zdeg/180*np.pi
@@ -72,6 +78,7 @@ def get_transformation(zdeg, ydeg, xdeg):
     T = Tz.dot(Ty).dot(Tx)
     return T
 
+
 def transform_pts(pts, transform, noise_level=0):
     if noise_level > 0:
         noise = noise_level*(2*np.random.random(size=pts.T.shape)-1)
@@ -79,6 +86,7 @@ def transform_pts(pts, transform, noise_level=0):
         noise = 0
     transformed_pts = np.dot(transform, pts.T) + noise
     return transformed_pts.T
+
 
 def geometric_hash(vectors):
     # Use QR Decomposition
@@ -109,6 +117,7 @@ def geometric_features(pts, nb_workers):
     features = np.array(features)
     return features
 
+
 def match_pts(feat_stationary, feat_moving, significance_threshold, display=False):
     print(f'Detected nuclei in stationary image: {feat_stationary.shape[0]}')
     print(f'Detected nuclei in moving image: {feat_moving.shape[0]}')
@@ -126,9 +135,11 @@ def match_pts(feat_stationary, feat_moving, significance_threshold, display=Fals
     print(f'Matches after filtering: {nb_matches}')
     return stationary_idx, moving_idx
 
+
 def augment(pts):
     nb_pts = pts.shape[0]
     return np.hstack([pts, np.ones((nb_pts, 1))])
+
 
 def augmented_matrix(pts):
     nb_pts = pts.shape[0]
@@ -139,12 +150,15 @@ def augmented_matrix(pts):
     A[2*nb_pts:,8:] = submatrix
     return A
 
+
 def flatten(pts):
     return pts.T.flatten()
+
 
 def unflatten(pts_vector):
     nb_pts = int(len(pts_vector)/3)
     return np.reshape(pts_vector, (3, nb_pts)).T
+
 
 def estimate_affine(batch_stationary, batch_moving, mode='ransac', min_samples=4, residual_threshold=None):
     if batch_stationary.shape[0] != batch_moving.shape[0]:
@@ -165,6 +179,7 @@ def estimate_affine(batch_stationary, batch_moving, mode='ransac', min_samples=4
     else:
         raise ValueError('Only supported modes are ransac and lstsq')
 
+
 def register_pts(pts, linear_model):
     # Solve with lstsq
     # t_hat = estimate_affine(candidates_stationary, candidates_moving, mode='lstsq')
@@ -175,8 +190,10 @@ def register_pts(pts, linear_model):
     # plot_pts(pts_stationary, pts_registered)
     return unflatten(linear_model.predict(augmented_matrix(pts)))
 
+
 def average_residual(pts1, pts2):
     return np.linalg.norm(pts1-pts2, axis=-1).mean()
+
 
 def generate_3d_image(size, center, sigma):
     I = np.zeros((size, size, size))
@@ -185,6 +202,7 @@ def generate_3d_image(size, center, sigma):
     I[idx] = 1
     I = filters.gaussian(I, sigma=sigma)
     return I/I.max()
+
 
 def coord_mapping(fixed_coords, c, matches_stationary, smoothing):
     nb_pts = fixed_coords.shape[0]
@@ -197,6 +215,7 @@ def coord_mapping(fixed_coords, c, matches_stationary, smoothing):
     moving_coords = T.dot(c)
     # moving_coords = np.reshape(moving_coords, (1, *moving_coords.shape))
     return moving_coords
+
 
 def consumer(queue, io_lock, c, matches_stationary, smoothing, img_moving, img_registered):
     while True:
@@ -234,11 +253,14 @@ def consumer(queue, io_lock, c, matches_stationary, smoothing, img_moving, img_r
             print('Nearest', nearest)
             # img_registered[fixed_coord[0], fixed_coord[1], fixed_coord[2]] = interpolated_value
 
+
 def get_nb_chunks(img):
     return tuple(int(np.ceil(img_dim/chunk_dim)) for img_dim, chunk_dim in zip(img.shape, img.chunks))
 
+
 def get_chunk_index(chunk_shape, chunk_idx):
     return np.array([int(i*dim) for i, dim in zip(chunk_idx, chunk_shape)])
+
 
 def do_work(img_fixed, img_moving, img_registered, start, local_coords, batch_size, c, matches_stationary, smoothing):
     chunk_shape = np.array(img_fixed.chunks)
@@ -285,6 +307,7 @@ def do_work(img_fixed, img_moving, img_registered, start, local_coords, batch_si
     interp_chunk = np.reshape(interp_values, output_shape)
 
     img_registered[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]] = interp_chunk
+
 
 def main():
     # Point cloud synthesis

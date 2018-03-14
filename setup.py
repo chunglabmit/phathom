@@ -13,12 +13,12 @@ setup(
     long_description=long_description,
     install_requires=[
         "matplotlib",
-        "numpy",
         "PyMaxflow",
         "scipy",
         "scikit-image",
         "tifffile",
-        "zarr"
+        "zarr",
+        "numpy",
     ],
     author="Kwanghun Chung Lab",
     packages=["phathom"],
