@@ -1,6 +1,7 @@
 from . import utils
-import tifffile
+import skimage.external.tifffile as tifffile
 import zarr
+
 
 
 def imread(path):

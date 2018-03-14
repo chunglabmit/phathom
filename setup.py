@@ -16,7 +16,6 @@ setup(
         "PyMaxflow",
         "scipy",
         "scikit-image",
-        "tifffile",
         "zarr",
         "numpy",
     ],
