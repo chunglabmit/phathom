@@ -17,7 +17,8 @@ To address this, Phathom uses persistent [Zarr][3] arrays to store and access la
 For processing, Phathom uses the [SCOOP][4] library to coordinate a pool of workers, either locally or in a distributed manner.
 Phathom supports HPC environments using [SLURM][5].
 
-## References
+[//]: # (References)
+
 [1]: https://en.wikipedia.org/wiki/Light_sheet_fluorescence_microscopy
 [2]: https://github.com/scikit-image/scikit-image
 [3]: https://github.com/zarr-developers/zarr
@@ -26,4 +27,3 @@ Phathom supports HPC environments using [SLURM][5].
 
 ## Authors
 Phathom is maintained by members of the Kwanghun Chung Lab at MIT.
-
