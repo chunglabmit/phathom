@@ -1,4 +1,4 @@
-from . import imageio
+from . import conversion as imageio
 from . import utils
 import numpy as np
 from skimage.filters import threshold_otsu
