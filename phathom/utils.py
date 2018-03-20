@@ -1,5 +1,6 @@
 import os
 import pickle
+import numpy as np
 
 # TODO: Convert utils.py module to use pathlib module
 

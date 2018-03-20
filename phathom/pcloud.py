@@ -4,7 +4,7 @@ from scipy.ndimage import geometric_transform, map_coordinates
 from scipy.stats import multivariate_normal
 from sklearn.neighbors import NearestNeighbors, kneighbors_graph
 from sklearn import linear_model
-import imageio
+from . import conversion as imageio
 from skimage import filters
 import multiprocessing
 import zarr
@@ -119,20 +119,20 @@ def geometric_features(pts, nb_workers):
 
 
 def match_pts(feat_stationary, feat_moving, significance_threshold, display=False):
-    print(f'Detected nuclei in stationary image: {feat_stationary.shape[0]}')
-    print(f'Detected nuclei in moving image: {feat_moving.shape[0]}')
+    # print(f'Detected nuclei in stationary image: {feat_stationary.shape[0]}')
+    # print(f'Detected nuclei in moving image: {feat_moving.shape[0]}')
     # Find nearest neighbors
     nbrs = NearestNeighbors(n_neighbors=2, algorithm='kd_tree', n_jobs=-1).fit(feat_stationary)
     distances, indices = nbrs.kneighbors(feat_moving)
     nb_pts = indices.shape[0]
-    print(f'Matches before filtering: {nb_pts}')
+    # print(f'Matches before filtering: {nb_pts}')
     significance = distances[:,0]/(1e-9+distances[:,1])
     if display:
         plt.hist(significance, bins=100)
     moving_idx = np.where(significance < significance_threshold)[0]
     stationary_idx = indices[moving_idx][:,0]
     nb_matches = stationary_idx.shape[0]
-    print(f'Matches after filtering: {nb_matches}')
+    # print(f'Matches after filtering: {nb_matches}')
     return stationary_idx, moving_idx
 
 
@@ -169,7 +169,7 @@ def estimate_affine(batch_stationary, batch_moving, mode='ransac', min_samples=4
         ransac = linear_model.RANSACRegressor(min_samples=min_samples, loss='absolute_loss', residual_threshold=residual_threshold).fit(A, b)
         inlier_mask = unflatten(ransac.inlier_mask_)
         inlier_idx = np.where(inlier_mask.any(axis=-1))[0]
-        print(f'RANSAC inlier matches: {len(inlier_idx)}')
+        # print(f'RANSAC inlier matches: {len(inlier_idx)}')
         return ransac, inlier_idx
     elif mode == 'lstsq':
         x, resid, _, _ = np.linalg.lstsq(A, b, rcond=None)
@@ -328,7 +328,7 @@ def main():
     # moving_img_file = '../data/spim_registration/spim_moving.tif'
     fixed_zarr_file = '../data/spim_registration/spim_fixed.zarr'
     moving_zarr_file = '../data/spim_registration/spim_moving.zarr'
-    batch_size = 1_000_000
+    # batch_size = 1_000_000
     # Load pts
     pts_fixed_file = 'centroids_fixed.npy'
     pts_moving_file = 'centroids_moving.npy'
@@ -350,17 +350,17 @@ def main():
 
     # Load pts
     # pts_stationary = np.load(pts_fixed_file)
-    pts_moving = np.load(pts_moving_file)
+    # pts_moving = np.load(pts_moving_file)
 
-    np.random.shuffle(pts_moving)
+    # np.random.shuffle(pts_moving)
 
     # plot_pts(pts_stationary, pts_moving)
 
-    subset = pts_moving[:10_000]
-    coords = np.vstack((2.5*subset[:,0], 1.25*subset[:,1], 1.25*subset[:,2])).T
-    print(coords.shape)
-    print(pts_moving.shape)
-    plot_pts(coords)
+    # subset = pts_moving[:10_000]
+    # coords = np.vstack((2.5*subset[:,0], 1.25*subset[:,1], 1.25*subset[:,2])).T
+    # print(coords.shape)
+    # print(pts_moving.shape)
+    # plot_pts(coords)
 
     # # Extract geometric features
     # feat_stationary = geometric_features(pts_stationary, nb_workers)
