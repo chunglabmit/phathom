@@ -1,7 +1,8 @@
 from . import partition
 from . import graphcuts
 from . import utils
-from . import imageio
+from . import conversion as imageio
+import argparse
 import numpy as np
 import scipy.ndimage as ndi
 import skimage
@@ -184,11 +185,13 @@ def segment(input_file, output_paths, upsample, sigma, h, T):
 
     # Convert to float32
     # print('Converting to float32')
-    data = skimage.img_as_float32(data)
+    data = skimage.img_as_float(data).astype(np.float32)
 
     # Upsampling
     # print('Upsampling the image')
-    data = transform.rescale(data, scale=upsample, order=3, multichannel=False, mode='reflect', anti_aliasing=True)
+    # LEEK: current version of skimage.transform.rescale does not support 3d
+    if any([_ != 1.0 for _ in upsample]):
+        data = transform.rescale(data, scale=upsample, order=3, multichannel=False, mode='reflect', anti_aliasing=True)
     # add_output('upsampled', data)
 
     # Extract foreground
@@ -238,21 +241,23 @@ def segment(input_file, output_paths, upsample, sigma, h, T):
     binary_seg = seg > 0
 
     # print('Saving image')
-    imageio.imsave(path=output_paths['segmentation_path'], data=binary_seg.astype('uint8'))
+    if "segmentation_path" in output_paths:
+        imageio.imsave(path=output_paths['segmentation_path'], data=binary_seg.astype('uint8'))
 
     # Calculate the distance transform
-    dist_map = ndi.morphology.distance_transform_edt(binary_seg)
+    #dist_map = ndi.morphology.distance_transform_edt(binary_seg)
 
     # Save the distance transform
     # imageio.imsave(file=output_paths['distance_path'], data=dist_map.astype('float32'))
 
     # Calculate the normalized gradient of the distance map
-    grad = gradient(dist_map)
-    norm = np.linalg.norm(grad, axis=-1)
-    norm_grad = grad / (1e-6 + np.reshape(norm, (*norm.shape, 1)))
+    #grad = gradient(dist_map)
+    #norm = np.linalg.norm(grad, axis=-1)
+    #norm_grad = grad / (1e-6 + np.reshape(norm, (*norm.shape, 1)))
 
     # Save the direction map
     # imageio.imsave(file=output_paths['direction_path'], data=norm_grad.astype('float32'))
+    return binary_seg
 
 
 def segment_chunks(working_dir, nb_workers, upsampling, sigma, h, T):
@@ -288,21 +293,58 @@ def segment_chunks(working_dir, nb_workers, upsampling, sigma, h, T):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input-path",
+        help="Path to the image to be segmented")
+    parser.add_argument(
+        "--output-path",
+        help = "Path to the segmentation file to be generated")
+    parser.add_argument(
+        "--centroids-path",
+        help = "Path to the .npy file containing the centroids of "
+        "detected cells"
+    )
+    parser.add_argument(
+        "--upsampling",
+        default="1,1,1")
+    parser.add_argument(
+        "--sigma",
+        default="1.5,1.5,1.5"
+    )
+    parser.add_argument(
+        "--maxima-suppression-threshold",
+        type=float,
+        default=0.01)
+    parser.add_argument(
+        "--foreground-threshold",
+        type=float,
+        default=0.01)
+    parser.add_argument(
+        "--n-workers",
+        type=int,
+        default=8
+    )
+    args = parser.parse_args()
     # input_path = '../data/spim_crop/input/z00000_y00000_x00000.tif'
     # output_path = '../data/spim_crop/test.tif'
-    upsampling = (1, 1, 1)
-    sigma = (1.5, 1.5, 1.5)
-    h = 0.01
-    T = 0.01
-    # segment(input_path, output_path, upsampling, sigma, h, minT)
+    upsampling = list(map(float, args.upsampling.split(",")))
+    sigma = list(map(float, args.sigma.split(",")))
+    h = args.maxima_suppression_threshold
+    minT = args.foreground_threshold
+    if True:
+        binary_seg = segment(
+            args.input_path, {}, upsampling, sigma, h, minT)
+    # TODO: make segmentation in chunks into an option
+    else:
+        working_dir = '../data/control/'
+        nb_workers = args.n_workers
+        segment_chunks(working_dir, nb_workers, upsampling, sigma, h, minT)
+        binary_seg = partition.combine_chunks(os.path.join(working_dir, 'segmentation/'))
 
-    working_dir = '../data/control/'
-    nb_workers = 8
-    # segment_chunks(working_dir, nb_workers, upsampling, sigma, h, T)
-
-    centroids_file = '../data/control/centroids.npy'
-    binary_seg = partition.combine_chunks(os.path.join(working_dir, 'segmentation/'))
+    centroids_file = args.centroids_path
     labeled_seg = ndi.label(binary_seg)[0]
+    imageio.imsave(args.output_path, labeled_seg.astype(np.uint32))
     centroids = find_centroids(labeled_seg)
     np.save(file=centroids_file, arr=centroids)
 
