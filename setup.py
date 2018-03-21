@@ -18,11 +18,13 @@ setup(
         "scikit-image",
         "zarr",
         "numpy",
+        "munkres"
     ],
     author="Kwanghun Chung Lab",
     packages=["phathom"],
     entry_points={ 'console_scripts': [
-        'phathom-segmentation=phathom.segmentation:main'
+        'phathom-segmentation=phathom.segmentation:main',
+        'phathom-score-centroids=phathom.score.main'
     ]},
     url="https://github.com/chunglabmit/phathom",
     license="MIT",
