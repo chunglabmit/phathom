@@ -1,4 +1,6 @@
 import phathom
+import phathom.conversion
+import phathom.utils
 import numpy as np
 import unittest
 import os
@@ -50,7 +52,8 @@ class TestUtils(unittest.TestCase):
         """
         Scan for all files within tests/file_tests/
         """
-        file_test_dir = 'tests/file_tests/'
+        file_test_dir = os.path.join(os.path.dirname(__file__),
+                                     'file_tests')
         expected_files = ['file1.txt', 'file2.tif', 'file3.tif']
         found_files = phathom.utils.files_in_dir(file_test_dir)
         self.assertEqual(found_files, expected_files, msg='found incorrect files')
@@ -59,7 +62,8 @@ class TestUtils(unittest.TestCase):
         """
         Scan for all tifs within tests/file_tests/
         """
-        file_test_dir = 'tests/file_tests/'
+        file_test_dir = os.path.join(os.path.dirname(__file__),
+                                     'file_tests')
         expected_files = ['file2.tif', 'file3.tif']
 
         abs_path = os.path.abspath(file_test_dir)
