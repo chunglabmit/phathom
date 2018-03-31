@@ -1,16 +1,12 @@
 import numpy as np
 import scipy
-from scipy.ndimage import geometric_transform, map_coordinates
 from scipy.stats import multivariate_normal
 from sklearn.neighbors import NearestNeighbors, kneighbors_graph
 from sklearn import linear_model
-from . import conversion as imageio
 from skimage import filters
 import multiprocessing
-import zarr
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
-
 
 # Set consistent numpy random state
 np.random.seed(123)
@@ -20,16 +16,16 @@ def plot_pts(pts1, pts2=None, candid1=None, candid2=None):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    ax.scatter(pts1[:,0], pts1[:,1], pts1[:,2], c='b', marker='o', label='Stationary')
+    ax.scatter(pts1[:,2], pts1[:,1], pts1[:,0], c='b', marker='o', label='Stationary', alpha=0.01)
 
     if pts2 is not None:
-        ax.scatter(pts2[:,0], pts2[:,1], pts2[:,2], c='r', marker='o', label='Moving')
+        ax.scatter(pts2[:,2], pts2[:,1], pts2[:,0], c='r', marker='o', label='Moving', alpha=0.01)
 
     if candid1 is not None and candid2 is not None:
         for i in range(candid1.shape[0]):
-            x = [candid1[i,0], candid2[i, 0]]
+            x = [candid1[i,2], candid2[i, 2]]
             y = [candid1[i,1], candid2[i, 1]]
-            z = [candid1[i,2], candid2[i, 2]]
+            z = [candid1[i,0], candid2[i, 0]]
             ax.plot(x, y, z, c='g', alpha=0.5)
 
     ax.set_xlabel('x')
@@ -43,7 +39,8 @@ def plot_pts(pts1, pts2=None, candid1=None, candid2=None):
         min_xyz = pts1.min()
     ax.set_xlim(min_xyz, max_xyz)
     ax.set_ylim(min_xyz, max_xyz)
-    ax.set_zlim(min_xyz, max_xyz)
+    # ax.set_zlim(min_xyz, max_xyz)
+    ax.set_zlim(-128, 512-128)
     ax.legend()
     plt.show()
 
@@ -96,13 +93,14 @@ def geometric_hash(vectors):
     q = q.dot(d)
     r = d.dot(r)
     # u, s, v = np.linalg.svd(a)
-    return r[np.triu_indices(3)]
+    feat_vector = r[np.triu_indices(3)]
+    return feat_vector #/ np.linalg.norm(feat_vector)
 
 
 def geometric_features(pts, nb_workers):
     # Performance params available: leaf_size and n_jobs
     graph = kneighbors_graph(pts, n_neighbors=3, mode='connectivity', n_jobs=-1)
-    # TODO: Use Pool.starmap to map pts to feature vectors given nn_graph
+    # TODO: Transfer vector computation in this loop into the worker pool
     nb_pts = pts.shape[0]
     args = []
     for i in range(nb_pts):
@@ -112,8 +110,10 @@ def geometric_features(pts, nb_workers):
         nearest_pts = pts[indices,:] # Sorted by increasing dist
         vectors = nearest_pts-origin
         args.append(vectors)
+    # This pool map isn't using all cores...
     with multiprocessing.Pool(processes=nb_workers) as pool:
         features = pool.map(geometric_hash, args)
+    # converting to a numpy array is pretty slow too, but not bad
     features = np.array(features)
     return features
 
@@ -129,6 +129,7 @@ def match_pts(feat_stationary, feat_moving, significance_threshold, display=Fals
     significance = distances[:,0]/(1e-9+distances[:,1])
     if display:
         plt.hist(significance, bins=100)
+        plt.show()
     moving_idx = np.where(significance < significance_threshold)[0]
     stationary_idx = indices[moving_idx][:,0]
     nb_matches = stationary_idx.shape[0]
@@ -166,10 +167,11 @@ def estimate_affine(batch_stationary, batch_moving, mode='ransac', min_samples=4
     b = flatten(batch_moving)
     A = augmented_matrix(batch_stationary)
     if mode == 'ransac':
-        ransac = linear_model.RANSACRegressor(min_samples=min_samples, loss='absolute_loss', residual_threshold=residual_threshold).fit(A, b)
+        ransac = linear_model.RANSACRegressor(min_samples=min_samples,
+                                              loss='absolute_loss',
+                                              residual_threshold=residual_threshold).fit(A, b)
         inlier_mask = unflatten(ransac.inlier_mask_)
         inlier_idx = np.where(inlier_mask.any(axis=-1))[0]
-        # print(f'RANSAC inlier matches: {len(inlier_idx)}')
         return ransac, inlier_idx
     elif mode == 'lstsq':
         x, resid, _, _ = np.linalg.lstsq(A, b, rcond=None)
@@ -372,7 +374,7 @@ def main():
 
     # # plot_pts(pts_stationary, pts_moving, matches_stationary, matches_moving)
 
-    # # Salve for Affine transform with RANSAC
+    # # Solve for Affine transform with RANSAC
     # ransac, inlier_idx = estimate_affine(matches_stationary, matches_moving, min_samples=min_samples, residual_threshold=resid_T)
     # pts_registered = register_pts(pts_stationary, ransac)
     # ave_residual = average_residual(matches_moving, pts_registered[stationary_idx])
