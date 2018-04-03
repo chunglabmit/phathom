@@ -4,6 +4,7 @@ import numpy as np
 import zarr
 from skimage import feature, filters
 import multiprocessing
+from scipy.signal import correlate, choose_conv_method
 from scipy.ndimage import map_coordinates
 from skimage.external import tifffile
 import tqdm
@@ -233,17 +234,20 @@ def register(moving_img, fixed_img, output_img, transformation, nb_workers, batc
 
 def main():
     # Input images
-    fixed_zarr_path = 'D:/Justin/coregistration/fixed/C0/fixed.zarr'
-    moving_zarr_path = 'D:/Justin/coregistration/moving/C0/moving.zarr'
-    registered_zarr_path = 'D:/Justin/coregistration/moving/C0/registered.zarr'
-    registered_tif_path = 'D:/Justin/coregistration/moving/C0/registered.tif'
+    voxel_dimensions = (2.0, 1.6, 1.6)
+    fixed_zarr_path = 'D:/Justin/coregistration/fixed/C0/roi3.zarr'
+    moving_zarr_path = 'D:/Justin/coregistration/moving/C0/roi3.zarr'
+    registered_zarr_path = 'D:/Justin/coregistration/moving/C0/roi3_reg.zarr'
+    registered_tif_path = 'D:/Justin/coregistration/moving/C0/roi3_reg.tif'
     # Processing
-    nb_workers = 44
+    nb_workers = 6
     overlap = 8
     # Keypoints
     sigma = (1.2, 2.0, 2.0)
     min_distance = 3
     min_intensity = 100
+    # Density maps
+    bin_size = 40
     # Matching
     signif_thresh = 0.4
     dist_thresh = None
@@ -262,69 +266,92 @@ def main():
     moving_pts = detect_blobs_parallel(moving_img, sigma, min_distance, min_intensity, nb_workers, overlap)
     print('found {} keypoints in fixed image'.format(len(fixed_pts)))
     print('found {} keypoints in moving image'.format(len(moving_pts)))
-    # pcloud.plot_pts(fixed_pts, moving_pts)
 
-    print('extracting features')
-    fixed_features = pcloud.geometric_features(fixed_pts, nb_workers)
-    moving_features = pcloud.geometric_features(moving_pts, nb_workers)
+    print('calculating density maps')
+    # Convert indices into physical coordiantes in micron
+    fixed_pts_um = np.array([dim*fixed_pts[:,i] for dim, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
+    moving_pts_um = np.array([dim*moving_pts[:,i] for dim, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
+    # Get the physical size of the whole image
+    fixed_max_um = np.array([dim*s for dim, s in zip(voxel_dimensions, fixed_img.shape)])
+    moving_max_um = np.array([dim*s for dim, s in zip(voxel_dimensions, moving_img.shape)])
+    fixed_bins = np.ceil(fixed_max_um/bin_size)
+    moving_bins = np.ceil(moving_max_um/bin_size)
 
-    print('matching points')
-    fixed_idx, moving_idx = pcloud.match_pts(fixed_features, moving_features, signif_thresh)
-    fixed_matches = fixed_pts[fixed_idx]
-    moving_matches = moving_pts[moving_idx]
-    print('found {} matches'.format(len(fixed_matches)))
-    # pcloud.plot_pts(fixed_pts, moving_pts, candid1=fixed_matches, candid2=moving_matches)
+    fixed_density, fixed_edges = np.histogramdd(fixed_pts_um, bins=fixed_bins)
+    moving_density, moving_edges = np.histogramdd(moving_pts_um, bins=moving_bins)
 
-    print('estimating affine transformation')
-    ransac, inlier_idx = pcloud.estimate_affine(fixed_matches,
-                                                moving_matches,
-                                                min_samples=min_samples,
-                                                residual_threshold=residual_threshold)
-    fixed_inliers = fixed_matches[inlier_idx]
-    moving_inliers = moving_matches[inlier_idx]
-    print('{} matches remain after RANSAC'.format(len(inlier_idx)))
-    # pcloud.plot_pts(fixed_pts, moving_pts, candid1=fixed_inliers, candid2=moving_inliers)
+    import matplotlib.pyplot as plt
+    plt.imshow(fixed_density[2])
+    plt.show()
+    plt.imshow(moving_density[2])
+    plt.show()
 
-    print('performing coarse alignment')
-    print('pass #1')
-    t, r = estimate_rigid(fixed_inliers, moving_inliers)
-    # Find average residual
-    coarse_residuals = rigid_residuals(t, r, fixed_inliers, moving_inliers)
-    coarse_distances = residuals_to_distances(coarse_residuals)
-    coarse_ave_distance = average_distance(coarse_distances)
-    print('average error: {0:.1f} voxels'.format(coarse_ave_distance))
-    if dist_thresh is None:
-        import matplotlib.pyplot as plt
-        plt.hist(coarse_distances, bins=100)
-        plt.show()
-        dist_thresh = coarse_ave_distance
-        print('using {} voxels for distance threshold'.format(dist_thresh))
-    inliers_dist_idx = np.where(coarse_distances <= dist_thresh)
-    fixed_inliers_dist = fixed_inliers[inliers_dist_idx]
-    moving_inliers_dist = moving_inliers[inliers_dist_idx]
-    print('{} matches remain after distance filtering'.format(len(fixed_inliers_dist)))
-    print('pass #2')
-    t, r = estimate_rigid(fixed_inliers_dist, moving_inliers_dist)
-    coarse_residuals = rigid_residuals(t, r, fixed_inliers_dist, moving_inliers_dist)
-    coarse_distances = residuals_to_distances(coarse_residuals)
-    coarse_ave_distance = average_distance(coarse_distances)
-    print('average error: {0:.1f} voxels'.format(coarse_ave_distance))
+    corr = correlate(fixed_density, moving_density, method='auto')
 
-    # print('applying rigid transformation to all fixed points')
-    # fixed_registered = rigid_transformation(t, r, fixed_pts)
-    # pcloud.plot_pts(fixed_registered, moving_pts)
+    print(corr.shape, fixed_density.shape)
 
-    print('registering the moving image')
-    output_img = zarr.open(registered_zarr_path,
-                           mode='w',
-                           shape=fixed_img.shape,
-                           chunks=fixed_img.chunks,
-                           dtype=fixed_img.dtype)
-    transformation = partial(rigid_transformation, t=t, r=r)
-    register(moving_img, fixed_img, output_img, transformation, nb_workers, batch_size)
 
-    print('converting zarr to tiffs')
-    conversion.zarr_to_tifs(registered_zarr_path, registered_tif_path, nb_workers)
+    # print('extracting features')
+    # fixed_features = pcloud.geometric_features(fixed_pts, nb_workers)
+    # moving_features = pcloud.geometric_features(moving_pts, nb_workers)
+    #
+    # print('matching points')
+    # fixed_idx, moving_idx = pcloud.match_pts(fixed_features, moving_features, signif_thresh)
+    # fixed_matches = fixed_pts[fixed_idx]
+    # moving_matches = moving_pts[moving_idx]
+    # print('found {} matches'.format(len(fixed_matches)))
+    # # pcloud.plot_pts(fixed_pts, moving_pts, candid1=fixed_matches, candid2=moving_matches)
+    #
+    # print('estimating affine transformation')
+    # ransac, inlier_idx = pcloud.estimate_affine(fixed_matches,
+    #                                             moving_matches,
+    #                                             min_samples=min_samples,
+    #                                             residual_threshold=residual_threshold)
+    # fixed_inliers = fixed_matches[inlier_idx]
+    # moving_inliers = moving_matches[inlier_idx]
+    # print('{} matches remain after RANSAC'.format(len(inlier_idx)))
+    # # pcloud.plot_pts(fixed_pts, moving_pts, candid1=fixed_inliers, candid2=moving_inliers)
+    #
+    # print('performing coarse alignment')
+    # print('pass #1')
+    # t, r = estimate_rigid(fixed_inliers, moving_inliers)
+    # # Find average residual
+    # coarse_residuals = rigid_residuals(t, r, fixed_inliers, moving_inliers)
+    # coarse_distances = residuals_to_distances(coarse_residuals)
+    # coarse_ave_distance = average_distance(coarse_distances)
+    # print('average error: {0:.1f} voxels'.format(coarse_ave_distance))
+    # if dist_thresh is None:
+    #     import matplotlib.pyplot as plt
+    #     plt.hist(coarse_distances, bins=100)
+    #     plt.show()
+    #     dist_thresh = coarse_ave_distance
+    #     print('using {} voxels for distance threshold'.format(dist_thresh))
+    # inliers_dist_idx = np.where(coarse_distances <= dist_thresh)
+    # fixed_inliers_dist = fixed_inliers[inliers_dist_idx]
+    # moving_inliers_dist = moving_inliers[inliers_dist_idx]
+    # print('{} matches remain after distance filtering'.format(len(fixed_inliers_dist)))
+    # print('pass #2')
+    # t, r = estimate_rigid(fixed_inliers_dist, moving_inliers_dist)
+    # coarse_residuals = rigid_residuals(t, r, fixed_inliers_dist, moving_inliers_dist)
+    # coarse_distances = residuals_to_distances(coarse_residuals)
+    # coarse_ave_distance = average_distance(coarse_distances)
+    # print('average error: {0:.1f} voxels'.format(coarse_ave_distance))
+    #
+    # # print('applying rigid transformation to all fixed points')
+    # # fixed_registered = rigid_transformation(t, r, fixed_pts)
+    # # pcloud.plot_pts(fixed_registered, moving_pts)
+    #
+    # print('registering the moving image')
+    # output_img = zarr.open(registered_zarr_path,
+    #                        mode='w',
+    #                        shape=fixed_img.shape,
+    #                        chunks=fixed_img.chunks,
+    #                        dtype=fixed_img.dtype)
+    # transformation = partial(rigid_transformation, t=t, r=r)
+    # register(moving_img, fixed_img, output_img, transformation, nb_workers, batch_size)
+    #
+    # print('converting zarr to tiffs')
+    # conversion.zarr_to_tifs(registered_zarr_path, registered_tif_path, nb_workers)
 
 if __name__ == '__main__':
     main()
