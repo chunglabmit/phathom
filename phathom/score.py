@@ -178,11 +178,25 @@ def main():
                         help="Maximum distance between pairs of points",
                         required=True,
                         type=float)
+    parser.add_argument("--fp-path",
+                         help="Path to list of false positive points",
+                        default="")
+    parser.add_argument("--fn-path",
+                        default="",
+                        help="Path to file of false negative points")
     args = parser.parse_args()
     gt = parse_into_array(args.gt_path)
     detected = parse_into_array(args.detected_path)
     max_distance = args.max_distance
     score = score_centroids(detected, gt, max_distance)
+    if args.fp_path != "":
+        fp_idxs = np.where(score.detected_per_gt == -1)
+        fp = detected[fp_idxs]
+        json.dump(fp.tolist(), open(args.fp_path, "w"))
+    if args.fn_path != "":
+        fn_idxs = np.where(score.gt_per_detected == -1)
+        fn = gt[fn_idxs]
+        json.dump(fn.tolist(), open(args.fn_path, "w"))
     for key, value in (("precision", score.precision),
                        ("recall", score.recall),
                        ("f-score", score.f_score)):
