@@ -1,6 +1,7 @@
 import os
 import pickle
 import numpy as np
+from itertools import product
 
 # TODO: Convert utils.py module to use pathlib module
 
@@ -78,3 +79,17 @@ def chunk_dims(img_shape, chunk_shape):
     :return: a tuple containing the number of chunks in each dimension
     """
     return tuple(int(np.ceil(i/c)) for i, c in zip(img_shape, chunk_shape))
+
+
+def chunk_coordinates(shape, chunks):
+    """ Calculate the global coordaintes for each chunk's starting position
+
+    :param shape: shape of the image to chunk
+    :param chunks: shape of each chunk
+    :return: a list containing the starting indices of each chunk
+    """
+    nb_chunks = chunk_dims(shape, chunks)
+    start = []
+    for indices in product(*tuple(range(n) for n in nb_chunks)):
+        start.append(tuple(i*c for i, c in zip(indices, chunks)))
+    return start
