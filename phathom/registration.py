@@ -4,7 +4,7 @@ import numpy as np
 import zarr
 from skimage import feature, filters
 import multiprocessing
-from scipy.signal import correlate, choose_conv_method
+from scipy.optimize import minimize
 from scipy.ndimage import map_coordinates
 from skimage.external import tifffile
 import tqdm
@@ -151,6 +151,23 @@ def rigid_transformation(t, r, pts):
     return r.dot(pts.T).T + t
 
 
+def indices_to_um(pts, voxel_dimensions):
+    return np.array([d*pts[:, i] for d, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
+
+
+def um_to_indices(pts_um, voxel_dimensions):
+    return np.array([pts_um[:, i]/d for d, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
+
+
+def use_um(voxel_dimensions):
+    def micron_transformation(transformation):
+        def wrapper(pts):
+            pts = um_to_indices(pts, voxel_dimensions)
+            return transformation(pts=pts)
+        return wrapper
+    return micron_transformation
+
+
 def rigid_residuals(t, r, fixed_pts, moving_pts):
     return moving_pts - rigid_transformation(t, r, fixed_pts)
 
@@ -180,6 +197,93 @@ def interpolate(image, coordinates):
                              cval=0.0,
                              prefilter=True)
     return output
+
+
+def correlation_coef(a, b):
+    return np.corrcoef(a.ravel(), b.ravel())[0, -1]
+
+
+def covariance(a, b):
+    return np.cov(a.ravel(), b.ravel())[0, -1]
+
+
+def square_distance(a, b):
+    return np.linalg.norm(a-b)
+
+
+def abs_difference(a, b):
+    return np.sum(np.abs(a-b))
+
+
+def ncc(fixed, registered):
+    idx = np.where(registered>0)
+    a = fixed[idx]
+    b =registered[idx]
+    return np.sum((a-a.mean())*(b-b.mean())/((a.size-1)*a.std()*b.std()))
+
+
+def rotation_matrix(thetas):
+    Rz = np.eye(3)
+    Rz[1,1] = np.cos(thetas[0])
+    Rz[2,2] = np.cos(thetas[0])
+    Rz[1,2] = -np.sin(thetas[0])
+    Rz[2,1] = np.sin(thetas[0])
+
+    Ry = np.eye(3)
+    Ry[0, 0] = np.cos(thetas[1])
+    Ry[2, 2] = np.cos(thetas[1])
+    Ry[0, 2] = np.sin(thetas[1])
+    Ry[2, 0] = -np.sin(thetas[1])
+
+    Rx = np.eye(3)
+    Rx[0, 0] = np.cos(thetas[2])
+    Rx[1, 1] = np.cos(thetas[2])
+    Rx[0, 1] = -np.sin(thetas[2])
+    Rx[1, 0] = np.sin(thetas[2])
+
+    return Rz.dot(Ry).dot(Rx)
+
+
+def unpack_variables(x):
+    t = x[:3]
+    thetas = x[3:]
+    r = rotation_matrix(thetas)
+    return t, r
+
+
+def pack_variables(t, r):
+    return np.concatenate((t, r.flatten()))
+
+
+def transform_density(density, output_shape, transformation, bin_dimensions):
+    pts = shape_to_coordinates(output_shape) # These are indices of the fixed density image
+    pts_um = indices_to_um(pts, bin_dimensions)
+    warped_coords_um = transformation(pts=pts_um)
+    warped_coords = um_to_indices(warped_coords_um, bin_dimensions)
+    warped_intensities = interpolate(density, warped_coords)
+    return np.reshape(warped_intensities, output_shape)
+
+
+def density_objective(x, fixed_density, moving_density, bin_dimensions):
+    t, r = unpack_variables(x) # these are for pts in um units
+    transformation = partial(rigid_transformation, t=t, r=r)
+    registered_density = transform_density(moving_density, fixed_density.shape, transformation, bin_dimensions)
+    objective = -ncc(fixed_density, registered_density)
+    # print('Objective function value: {}'.format(objective))
+    return objective
+
+
+def maximize_density_correlation(fixed_density, moving_density, bin_dimensions, verbose=False):
+    res = minimize(fun=density_objective,
+                   x0=np.zeros(6),
+                   args=(fixed_density, moving_density, bin_dimensions),
+                   # method=None,
+                   bounds=None,
+                   options={'disp': verbose})
+    print('Optimization status code {} and exit flag {}'.format(res.status, res.success))
+    print('Final correlation coefficient: {}'.format(-res.fun))
+    t, r = unpack_variables(res.x)
+    return t, r
 
 
 def register_chunk(moving_img, fixed_img, output_img, transformation, start, batch_size=None):
@@ -235,19 +339,19 @@ def register(moving_img, fixed_img, output_img, transformation, nb_workers, batc
 def main():
     # Input images
     voxel_dimensions = (2.0, 1.6, 1.6)
-    fixed_zarr_path = 'D:/Justin/coregistration/fixed/C0/roi3.zarr'
-    moving_zarr_path = 'D:/Justin/coregistration/moving/C0/roi3.zarr'
+    fixed_zarr_path = 'D:/Justin/coregistration/fixed/C0/roi1.zarr'
+    moving_zarr_path = 'D:/Justin/coregistration/moving/C0/roi1.zarr'
     registered_zarr_path = 'D:/Justin/coregistration/moving/C0/roi3_reg.zarr'
     registered_tif_path = 'D:/Justin/coregistration/moving/C0/roi3_reg.tif'
     # Processing
-    nb_workers = 6
+    nb_workers = 24
     overlap = 8
     # Keypoints
     sigma = (1.2, 2.0, 2.0)
     min_distance = 3
     min_intensity = 100
     # Density maps
-    bin_size = 40
+    bin_size_um = 60
     # Matching
     signif_thresh = 0.4
     dist_thresh = None
@@ -274,21 +378,31 @@ def main():
     # Get the physical size of the whole image
     fixed_max_um = np.array([dim*s for dim, s in zip(voxel_dimensions, fixed_img.shape)])
     moving_max_um = np.array([dim*s for dim, s in zip(voxel_dimensions, moving_img.shape)])
-    fixed_bins = np.ceil(fixed_max_um/bin_size)
-    moving_bins = np.ceil(moving_max_um/bin_size)
-
+    # Calculate the number of bins needed for each image in each dimension
+    fixed_bins = np.ceil(fixed_max_um/bin_size_um)
+    moving_bins = np.ceil(moving_max_um/bin_size_um)
+    # Approximate the point density using a histogram
     fixed_density, fixed_edges = np.histogramdd(fixed_pts_um, bins=fixed_bins)
     moving_density, moving_edges = np.histogramdd(moving_pts_um, bins=moving_bins)
 
+    fixed_density = filters.gaussian(fixed_density, sigma=0.8)
+    moving_density = filters.gaussian(moving_density, sigma=0.8)
+
+    bin_dimensions = tuple(bin_size_um for _ in range(3))
+    t, r = maximize_density_correlation(fixed_density, moving_density, bin_dimensions, verbose=True)
+
+    registered_density = transform_density(moving_density,
+                                           fixed_density.shape,
+                                           partial(rigid_transformation, t=t, r=r),
+                                           bin_dimensions)
+
     import matplotlib.pyplot as plt
-    plt.imshow(fixed_density[2])
+    plt.imshow(fixed_density[2], clim=[0, 20])
     plt.show()
-    plt.imshow(moving_density[2])
+    plt.imshow(moving_density[2], clim=[0, 20])
     plt.show()
-
-    corr = correlate(fixed_density, moving_density, method='auto')
-
-    print(corr.shape, fixed_density.shape)
+    plt.imshow(registered_density[2], clim=[0, 20])
+    plt.show()
 
 
     # print('extracting features')
@@ -337,6 +451,8 @@ def main():
     # coarse_ave_distance = average_distance(coarse_distances)
     # print('average error: {0:.1f} voxels'.format(coarse_ave_distance))
     #
+    # print(r, t)
+
     # # print('applying rigid transformation to all fixed points')
     # # fixed_registered = rigid_transformation(t, r, fixed_pts)
     # # pcloud.plot_pts(fixed_registered, moving_pts)
