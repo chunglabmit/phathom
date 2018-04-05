@@ -159,14 +159,22 @@ def regionprops(intensity_img, labels_img):
     return None
 
 
-def find_centroids(labels_img):
-    nb_regions = labels_img.max()
-    properties = measure.regionprops(labels_img)
-    centroids = np.zeros((nb_regions, 3))
-    for i, region in enumerate(properties):
-        centroids[i] = region.centroid
-    return centroids
-
+#def find_centroids(labels_img):
+#    nb_regions = labels_img.max()
+#    properties = measure.regionprops(labels_img)
+#    centroids = np.zeros((nb_regions, 3))
+#    for i, region in enumerate(properties):
+#        centroids[i] = region.centroid
+#    return centroids
+def find_centroids(l):
+    z, y, x = np.where(l > 0)
+    a = np.bincount(l[z, y, x])
+    a[0] = 1
+    xx = np.bincount(l[z, y, x], x)
+    yy = np.bincount(l[z, y, x], y)
+    zz = np.bincount(l[z, y, x], z)
+    return np.column_stack(
+        (zz.astype(float) / a, yy.astype(float) / a, xx.astype(float) / a))[1:]
 
 def segment(input_file, output_paths, upsample, sigma, h, T):
     # # Calculate the voxel dimensions after upsampling
@@ -325,6 +333,9 @@ def main():
         type=int,
         default=8
     )
+    parser.add_argument(
+        "--min-voxels", type=int, default=0
+    )
     args = parser.parse_args()
     # input_path = '../data/spim_crop/input/z00000_y00000_x00000.tif'
     # output_path = '../data/spim_crop/test.tif'
@@ -343,7 +354,19 @@ def main():
         binary_seg = partition.combine_chunks(os.path.join(working_dir, 'segmentation/'))
 
     centroids_file = args.centroids_path
-    labeled_seg = ndi.label(binary_seg)[0]
+    labeled_seg, count = ndi.label(binary_seg)
+    #
+    # Relabel the segmentation consecutively
+    #
+    if args.min_voxels > 0 and count > 0:
+        voxel_counts = np.bincount(labeled_seg[labeled_seg != 0])
+        w = np.where(voxel_counts[1:] >= args.min_voxels)[0]
+        if len(w) == 0:
+            labeled_seg[:] = 0
+        else:
+            relabel = np.zeros(len(voxel_counts), np.uint32)
+            relabel[w+1] = np.arange(len(w)) + 1
+            labeled_seg = relabel[labeled_seg]
     imageio.imsave(args.output_path, labeled_seg.astype(np.uint32))
     centroids = find_centroids(labeled_seg)
     np.save(file=centroids_file, arr=centroids)
