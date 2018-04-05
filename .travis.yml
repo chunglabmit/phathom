@@ -1,9 +1,16 @@
 language: python
+sudo: required
 python:
    - 3.5
+
+before_install:
+    - set -e  # fail on any error
+    - sudo apt-get update -q
+    - set -x; sudo apt-get install -y -q openmpi-bin libopenmpi-dev
+
 install:
    - pip install -r requirements.txt
    - pip install nose
 script:
    - nosetests tests
-sudo: false
+   - PHATHOM_LAUNCHER=mpirun nosetests tests
