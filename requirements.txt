@@ -5,3 +5,4 @@ scikit-image
 PyMaxflow
 zarr
 h5py
+pyina

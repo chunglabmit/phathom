@@ -18,7 +18,8 @@ setup(
         "scikit-image",
         "zarr",
         "numpy",
-        "h5py"
+        "h5py",
+        "pyina"
     ],
     author="Kwanghun Chung Lab",
     packages=["phathom"],
