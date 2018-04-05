@@ -112,11 +112,10 @@ def parallel_map(fn, args):
     Configuration:
         The mapper is configured by two environment variables:
 
-        PHATHOM_LAUNCHER - this is the name of one of the launchers, e.g.
-                           "mpirun" for OpenMPI or similar or "srun" for
-                           SLURM's srun.
-                           The full list can be obtained by running
-                [ _.split(".")[1][:-9] for _ in pyina.launchers.all_launchers()]
+        PHATHOM_MAPPER - this is the name of one of the mapper classes. Typical
+                         choices are MpiPool or MpiScatter for OpenMPI and
+                         SlurmPool or SlurmScatter for SLURM. By default, it
+                         uses the serial mapper which runs on a single thread.
 
         PHATHOM_NODES - this is the number of nodes that should be used in
                         parallel.
@@ -126,15 +125,14 @@ def parallel_map(fn, args):
     global mapper
 
     if mapper is None:
-        if "PHATHOM_LAUNCHER" in os.environ:
-            launcher_name = os.environ["PHATHOM_LAUNCHER"] + "_launcher"
-            launcher = getattr(pyina.launchers, launcher_name)
+        if "PHATHOM_MAPPER" in os.environ:
+            mapper_name = os.environ["PHATHOM_MAPPER"]
+            mapper_class = getattr(pyina.launchers, mapper_name)
             if "PHATHOM_NODES" in os.environ:
                 nodes = int(os.environ["PHATHOM_NODES"])
-                mapper = pyina.launchers.ParallelMapper(
-                    nodes, launcher=launcher)
+                mapper = mapper_class(nodes)
             else:
-                mapper = pyina.launchers.ParallelMapper(launcher=launcher)
+                mapper = mapper_class()
         else:
             mapper = pyina.launchers.SerialMapper()
 
