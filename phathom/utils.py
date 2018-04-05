@@ -4,7 +4,6 @@ import numpy as np
 from itertools import product
 import pyina.launchers
 from pyina.ez_map import ez_map
-import yaml
 
 # TODO: Convert utils.py module to use pathlib module
 

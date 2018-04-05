@@ -19,7 +19,9 @@ setup(
         "zarr",
         "numpy",
         "h5py",
-        "pyina"
+        "pyina",
+        "tqdm",
+        "scikit-learn"
     ],
     author="Kwanghun Chung Lab",
     packages=["phathom"],
