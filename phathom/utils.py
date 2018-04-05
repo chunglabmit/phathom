@@ -2,6 +2,9 @@ import os
 import pickle
 import numpy as np
 from itertools import product
+import pyina.launchers
+from pyina.ez_map import ez_map
+import yaml
 
 # TODO: Convert utils.py module to use pathlib module
 
@@ -93,3 +96,47 @@ def chunk_coordinates(shape, chunks):
     for indices in product(*tuple(range(n) for n in nb_chunks)):
         start.append(tuple(i*c for i, c in zip(indices, chunks)))
     return start
+
+mapper = None
+
+def parallel_map(fn, args):
+    """Map a function over an argument list, returning one result per arg
+
+    :param fn: the function to execute
+    :param args: a list of the single argument to send through the function
+                 per invocation
+    :returns: a list of results.
+
+    Usage:
+        myresults = parallel_map(my_function, my_inputs)
+
+    Configuration:
+        The mapper is configured by two environment variables:
+
+        PHATHOM_LAUNCHER - this is the name of one of the launchers, e.g.
+                           "mpirun" for OpenMPI or similar or "srun" for
+                           SLURM's srun.
+                           The full list can be obtained by running
+                [ _.split(".")[1][:-9] for _ in pyina.launchers.all_launchers()]
+
+        PHATHOM_NODES - this is the number of nodes that should be used in
+                        parallel.
+
+    By default, a serial mapper is returned if there is no mapper.
+    """
+    global mapper
+
+    if mapper is None:
+        if "PHATHOM_LAUNCHER" in os.environ:
+            launcher_name = os.environ["PHATHOM_LAUNCHER"] + "_launcher"
+            launcher = getattr(pyina.launchers, launcher_name)
+            if "PHATHOM_NODES" in os.environ:
+                nodes = int(os.environ["PHATHOM_NODES"])
+                mapper = pyina.launchers.ParallelMapper(
+                    nodes, launcher=launcher)
+            else:
+                mapper = pyina.launchers.ParallelMapper(launcher=launcher)
+        else:
+            mapper = pyina.launchers.SerialMapper()
+
+    return mapper.map(fn, args)
