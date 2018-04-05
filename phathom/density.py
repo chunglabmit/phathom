@@ -1,6 +1,7 @@
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+from scipy.ndimage import affine_transform
 
 
 # Set consistent numpy random state
@@ -38,7 +39,7 @@ def plot_pts(pts1, pts2=None, alpha=1, candid1=None, candid2=None):
     plt.show()
 
 
-def plot_densities(z, fixed, moving=None, registered=None, mip=False):
+def plot_densities(fixed, moving=None, registered=None, z=0, mip=False):
     if mip:
         fixed_img = fixed.max(axis=0)
     else:
@@ -59,10 +60,6 @@ def plot_densities(z, fixed, moving=None, registered=None, mip=False):
             registered_img = registered[z]
         plt.imshow(registered_img)
         plt.show()
-
-
-def img_dimensions(shape, voxel_dimensions):
-    return np.array([s*d for s, d in zip(shape, voxel_dimensions)])
 
 
 def rotation_matrix(thetas):
@@ -99,43 +96,84 @@ def um_to_indices(pts_um, voxel_dimensions):
 def main():
     # Original image properties
     voxel_dimensions = (2.0, 1.6, 1.6)
-    img_shape = (512, 512, 512)
+    fixed_img_shape = (256, 512, 512)
+    moving_img_shape = (256, 512, 512)
+
     # Synthetic point clouds
     nb_pts = 1000
-    translation = np.array([-500, 0, 0])
+    t = np.array([-1000, 0, 0])
+    r = rotation_matrix(np.array([np.pi/2, 0, 0])) # 90deg in plane rotation
+    noise_um = 0.0
+    missing_frac = 0.00
     # Density estimation
-    bin_size_um = 100
+    bin_size_um = 200
+
+    ###################################
 
     # Create synthetic point clouds
-    fixed_img_dimensions = img_dimensions(img_shape, voxel_dimensions)
-    moving_img_dimensions = fixed_img_dimensions
+    nb_missing = np.round(nb_pts * missing_frac)
+    missing_idx = np.random.choice(range(nb_pts), int(nb_missing), replace=False)
+    moving_noise_um = noise_um * np.random.rand(nb_pts, 3) # um
+    print('Taking out {} missing points.'.format(nb_missing))
 
-    fixed_pts = np.random.randn(nb_pts, 3)
-    fixed_pts_um = fixed_img_dimensions*fixed_pts
-
-    moving_pts_um = fixed_pts_um[:, (0, 2, 1)]
-    moving_pts_um[:, 2] *= -1
-    moving_pts_um += translation
+    fixed_pts = np.floor(np.array(fixed_img_shape) * np.random.randn(nb_pts, 3))  # indicies
+    fixed_pts_um = np.array(voxel_dimensions) * fixed_pts  # um
+    moving_pts_um = rigid_transformation(t, r, fixed_pts_um) + moving_noise_um # um
+    moving_pts_um = np.delete(moving_pts_um, missing_idx,axis=0)
 
     plot_pts(fixed_pts_um, moving_pts_um)
 
-    # Estimate translation from centroids
+    # Find translation
     fixed_centroid_um = fixed_pts_um.mean(axis=0)
     moving_centroid_um = moving_pts_um.mean(axis=0)
-    t = moving_centroid_um - fixed_centroid_um
-    print('Estimated translation vector: {}'.format(t))
+    fixed_pts_um_zeroed = fixed_pts_um - fixed_centroid_um
+    moving_pts_um_zeroed = moving_pts_um - moving_centroid_um
+    t_hat = moving_centroid_um - r.dot(fixed_centroid_um)
+    t_err = np.linalg.norm(t-t_hat)
+    print('Error in translation vector: {} um'.format(t_err))
 
-    # # Calculate histograms
-    # fixed_bins = np.ceil(fixed_img_dimensions / bin_size_um)
-    # moving_bins = np.ceil(moving_img_dimensions / bin_size_um)
-    #
-    # fixed_range = tuple((0, d) for d in fixed_img_dimensions)
-    # moving_range = tuple((0, d) for d in moving_img_dimensions)
-    #
-    # fixed_density, fixed_edges = np.histogramdd(fixed_pts_um, bins=fixed_bins, range=fixed_range)
-    # moving_density, moving_edges = np.histogramdd(moving_pts_um, bins=moving_bins, range=moving_range)
-    #
-    # plot_densities(3, fixed_density, moving_density, mip=True)
+    # Figure out the nb_bins
+    fixed_pts_um_range = np.array((fixed_pts_um.min(axis=0), fixed_pts_um.max(axis=0)))
+    moving_pts_um_range = np.array((moving_pts_um.min(axis=0), moving_pts_um.max(axis=0)))
+    fixed_pts_um_extent = np.diff(fixed_pts_um_range, axis=0)[0]
+    moving_pts_um_extent = np.diff(moving_pts_um_range, axis=0)[0]
+    fixed_bins = np.ceil(fixed_pts_um_extent / bin_size_um)
+    moving_bins = np.ceil(moving_pts_um_extent / bin_size_um)
+
+    # Figure out the bin ranges
+    fixed_bins_extent = bin_size_um*fixed_bins
+    moving_bins_extent = bin_size_um*moving_bins
+    fixed_excess = fixed_bins_extent - fixed_pts_um_extent
+    moving_excess = moving_bins_extent - moving_pts_um_extent
+    fixed_bin_range = fixed_pts_um_range + np.array((-fixed_excess/2, fixed_excess/2))
+    moving_bin_range = moving_pts_um_range + np.array((-moving_excess/2, moving_excess/2))
+
+    # Calculate the point density maps
+    fixed_density, fixed_edges = np.histogramdd(fixed_pts_um_zeroed, bins=fixed_bins, range=fixed_bin_range.T)
+    moving_density, moving_edges = np.histogramdd(moving_pts_um_zeroed, bins=moving_bins, range=moving_bin_range.T)
+
+    plot_densities(fixed_density, moving_density, mip=True)
+
+    # Try manual transformations
+    r = rotation_matrix(np.array([-np.pi/4, 0, 0]))
+    # r = np.eye(3)
+    print(r)
+
+    #TODO: Figure out the offset paramter for affine_transform or switch to map_coordinates
+
+    fixed_density_center = np.floor(np.array(fixed_density.shape)/2)
+    moving_density_center = np.floor(np.array(moving_density.shape)/2)
+    print(moving_density_center, moving_bins_extent/(2*bin_size_um))
+    transformed_density = affine_transform(moving_density,
+                                           matrix=r,
+                                           offset=moving_bins_extent/(2*bin_size_um),
+                                           output_shape=fixed_density.shape)
+
+    plot_densities(fixed_density, transformed_density, mip=True)
+
+
+
+
 
 
 
