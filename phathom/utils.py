@@ -25,7 +25,7 @@ def files_in_dir(path):
     :param path: path of the directory to check for files
     :return: list of all files in the input path
     """
-    return os.listdir(path)
+    return sorted(os.listdir(path))
 
 
 def tifs_in_dir(path):
