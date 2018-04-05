@@ -14,4 +14,4 @@ install:
    - pip install nose
 script:
    - nosetests tests
-   - PHATHOM_MAPPER=MpiPool nosetests tests
+   - PHATHOM_MAPPER=MpiScatter,PHATHOM_NODES=10 nosetests tests

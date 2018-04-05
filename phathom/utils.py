@@ -129,7 +129,7 @@ def parallel_map(fn, args):
             mapper_name = os.environ["PHATHOM_MAPPER"]
             mapper_class = getattr(pyina.launchers, mapper_name)
             if "PHATHOM_NODES" in os.environ:
-                nodes = int(os.environ["PHATHOM_NODES"])
+                nodes = os.environ["PHATHOM_NODES"]
                 mapper = mapper_class(nodes)
             else:
                 mapper = mapper_class()
