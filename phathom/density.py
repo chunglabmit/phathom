@@ -2,7 +2,9 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from scipy.ndimage import affine_transform
-
+from scipy.ndimage import map_coordinates, center_of_mass
+from scipy.optimize import minimize
+from skimage import filters
 
 # Set consistent numpy random state
 np.random.seed(123)
@@ -81,6 +83,13 @@ def rotation_matrix(thetas):
     return rz.dot(ry).dot(rx)
 
 
+def augmented_matrix(t, r):
+    a = np.eye(len(t)+1)
+    a[:-1, :-1] = r
+    a[:-1, -1] = t
+    return a
+
+
 def rigid_transformation(t, r, pts):
     return r.dot(pts.T).T + t
 
@@ -93,6 +102,39 @@ def um_to_indices(pts_um, voxel_dimensions):
     return np.array([pts_um[:, i]/d for d, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
 
 
+def shape_to_coordinates(shape):
+    indices = np.indices(shape)
+    z_idx = indices[0].flatten()
+    y_idx = indices[1].flatten()
+    x_idx = indices[2].flatten()
+    return np.array([z_idx, y_idx, x_idx]).T
+
+
+def transform_density(moving_density, output_shape, t, r):
+    coords = shape_to_coordinates(output_shape)
+    moving_coords = rigid_transformation(t, r, coords)
+    interp_values = map_coordinates(moving_density, moving_coords.T)
+    transformed_density = np.reshape(interp_values, output_shape)
+    return transformed_density
+
+
+def ncc(fixed, registered):
+    idx = np.where(registered>0)
+    a = fixed[idx]
+    b =registered[idx]
+    # a = fixed
+    # b = registered
+    return np.sum((a-a.mean())*(b-b.mean())/((a.size-1)*a.std()*b.std()))
+
+
+def registration_objective(x, moving_density, fixed_density):
+    t = x[:3]
+    thetas = x[3:]
+    r = rotation_matrix(thetas)
+    transformed_density = transform_density(moving_density, fixed_density.shape, t, r)
+    return -ncc(fixed_density, transformed_density)
+
+
 def main():
     # Original image properties
     voxel_dimensions = (2.0, 1.6, 1.6)
@@ -100,13 +142,14 @@ def main():
     moving_img_shape = (256, 512, 512)
 
     # Synthetic point clouds
-    nb_pts = 1000
+    nb_pts = 100
+    cov = np.diag(np.array([1,2,1]))
     t = np.array([-1000, 0, 0])
     r = rotation_matrix(np.array([np.pi/2, 0, 0])) # 90deg in plane rotation
     noise_um = 0.0
     missing_frac = 0.00
     # Density estimation
-    bin_size_um = 200
+    bin_size_um = 100
 
     ###################################
 
@@ -116,7 +159,7 @@ def main():
     moving_noise_um = noise_um * np.random.rand(nb_pts, 3) # um
     print('Taking out {} missing points.'.format(nb_missing))
 
-    fixed_pts = np.floor(np.array(fixed_img_shape) * np.random.randn(nb_pts, 3))  # indicies
+    fixed_pts = np.floor(np.array(fixed_img_shape) * np.random.multivariate_normal([0,0,0], cov, size=nb_pts)) # np.random.rand(nb_pts, 3))
     fixed_pts_um = np.array(voxel_dimensions) * fixed_pts  # um
     moving_pts_um = rigid_transformation(t, r, fixed_pts_um) + moving_noise_um # um
     moving_pts_um = np.delete(moving_pts_um, missing_idx,axis=0)
@@ -128,13 +171,16 @@ def main():
     moving_centroid_um = moving_pts_um.mean(axis=0)
     fixed_pts_um_zeroed = fixed_pts_um - fixed_centroid_um
     moving_pts_um_zeroed = moving_pts_um - moving_centroid_um
-    t_hat = moving_centroid_um - r.dot(fixed_centroid_um)
+    t_hat = moving_centroid_um - fixed_centroid_um
     t_err = np.linalg.norm(t-t_hat)
+    print('translation: {}'.format(t_hat))
     print('Error in translation vector: {} um'.format(t_err))
 
+    plot_pts(fixed_pts_um_zeroed, moving_pts_um_zeroed)
+
     # Figure out the nb_bins
-    fixed_pts_um_range = np.array((fixed_pts_um.min(axis=0), fixed_pts_um.max(axis=0)))
-    moving_pts_um_range = np.array((moving_pts_um.min(axis=0), moving_pts_um.max(axis=0)))
+    fixed_pts_um_range = np.array((fixed_pts_um_zeroed.min(axis=0), fixed_pts_um_zeroed.max(axis=0)))
+    moving_pts_um_range = np.array((moving_pts_um_zeroed.min(axis=0), moving_pts_um_zeroed.max(axis=0)))
     fixed_pts_um_extent = np.diff(fixed_pts_um_range, axis=0)[0]
     moving_pts_um_extent = np.diff(moving_pts_um_range, axis=0)[0]
     fixed_bins = np.ceil(fixed_pts_um_extent / bin_size_um)
@@ -152,24 +198,34 @@ def main():
     fixed_density, fixed_edges = np.histogramdd(fixed_pts_um_zeroed, bins=fixed_bins, range=fixed_bin_range.T)
     moving_density, moving_edges = np.histogramdd(moving_pts_um_zeroed, bins=moving_bins, range=moving_bin_range.T)
 
+    fixed_density = filters.gaussian(fixed_density, sigma=2)
+    moving_density = filters.gaussian(moving_density, sigma=2)
+
     plot_densities(fixed_density, moving_density, mip=True)
 
-    # Try manual transformations
-    r = rotation_matrix(np.array([-np.pi/4, 0, 0]))
-    # r = np.eye(3)
-    print(r)
 
-    #TODO: Figure out the offset paramter for affine_transform or switch to map_coordinates
+    # 3D intensity-based registration
+    fixed_density_com = np.array(fixed_density.shape)/2
+    moving_density_com = np.array(moving_density.shape)/2
+    t0 = moving_density_com - fixed_density_com
+    x0 = np.concatenate((t0, np.zeros(3)))
+    res = minimize(fun=registration_objective,
+                   x0=x0,
+                   args=(fixed_density, moving_density),
+                   method='Nelder-Mead',
+                   bounds=None,
+                   tol=1e-6,
+                   options={'disp': True})
+    print('Optimization status code {} and exit flag {}'.format(res.status, res.success))
+    print('Final correlation coefficient: {}'.format(-res.fun))
 
-    fixed_density_center = np.floor(np.array(fixed_density.shape)/2)
-    moving_density_center = np.floor(np.array(moving_density.shape)/2)
-    print(moving_density_center, moving_bins_extent/(2*bin_size_um))
-    transformed_density = affine_transform(moving_density,
-                                           matrix=r,
-                                           offset=moving_bins_extent/(2*bin_size_um),
-                                           output_shape=fixed_density.shape)
+    t_star = res.x[:3]
+    thetas_star = res.x[3:]
+    print(t_star, thetas_star)
+    r_star = rotation_matrix(thetas_star)
+    registered_density = transform_density(moving_density, fixed_density.shape, t_star, r_star)
 
-    plot_densities(fixed_density, transformed_density, mip=True)
+    plot_densities(fixed_density, registered_density, mip=True)
 
 
 

@@ -1,10 +1,12 @@
 import numpy as np
 import scipy
 from scipy.stats import multivariate_normal
+from scipy.spatial.distance import cdist
 from sklearn.neighbors import NearestNeighbors, kneighbors_graph
 from sklearn import linear_model
 from skimage import filters
 import multiprocessing
+import tqdm
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
@@ -39,8 +41,7 @@ def plot_pts(pts1, pts2=None, candid1=None, candid2=None):
         min_xyz = pts1.min()
     ax.set_xlim(min_xyz, max_xyz)
     ax.set_ylim(min_xyz, max_xyz)
-    # ax.set_zlim(min_xyz, max_xyz)
-    ax.set_zlim(-128, 512-128)
+    ax.set_zlim(min_xyz, max_xyz)
     ax.legend()
     plt.show()
 
@@ -85,56 +86,75 @@ def transform_pts(pts, transform, noise_level=0):
     return transformed_pts.T
 
 
-def geometric_hash(vectors):
+def geometric_hash(center, vectors):
     # Use QR Decomposition
-    a = np.vstack([vectors[2], vectors[0], vectors[1]]).T
+    a = np.vstack([vectors[2]-center, vectors[0]-center, vectors[1]-center]).T
     q, r = np.linalg.qr(a)
     d = np.diag(np.sign(np.diag(r)))
     q = q.dot(d)
     r = d.dot(r)
     # u, s, v = np.linalg.svd(a)
     feat_vector = r[np.triu_indices(3)]
-    return feat_vector #/ np.linalg.norm(feat_vector)
+    return feat_vector  # / np.linalg.norm(feat_vector)
 
 
 def geometric_features(pts, nb_workers):
     # Performance params available: leaf_size and n_jobs
-    graph = kneighbors_graph(pts, n_neighbors=3, mode='connectivity', n_jobs=-1)
-    # TODO: Transfer vector computation in this loop into the worker pool
-    nb_pts = pts.shape[0]
+    nbrs = NearestNeighbors(n_neighbors=3, algorithm='kd_tree', n_jobs=-1).fit(pts)
+
+    distances, indices = nbrs.kneighbors(pts)
+    # indices is len(pts) by 3, in order of decreasing distance
+
     args = []
-    for i in range(nb_pts):
-        origin = pts[i]
-        row = graph.getrow(i)
-        indices = row.indices
-        nearest_pts = pts[indices,:] # Sorted by increasing dist
-        vectors = nearest_pts-origin
-        args.append(vectors)
-    # This pool map isn't using all cores...
+    for center, row in zip(pts, indices):
+        args.append((center, pts[row]))
+
     with multiprocessing.Pool(processes=nb_workers) as pool:
-        features = pool.map(geometric_hash, args)
-    # converting to a numpy array is pretty slow too, but not bad
+        features = pool.starmap(geometric_hash, args)
+
+    # converting to a numpy array is pretty slow
     features = np.array(features)
+
     return features
 
 
-def match_pts(feat_stationary, feat_moving, significance_threshold, display=False):
-    # print(f'Detected nuclei in stationary image: {feat_stationary.shape[0]}')
-    # print(f'Detected nuclei in moving image: {feat_moving.shape[0]}')
-    # Find nearest neighbors
-    nbrs = NearestNeighbors(n_neighbors=2, algorithm='kd_tree', n_jobs=-1).fit(feat_stationary)
-    distances, indices = nbrs.kneighbors(feat_moving)
-    nb_pts = indices.shape[0]
-    # print(f'Matches before filtering: {nb_pts}')
-    significance = distances[:,0]/(1e-9+distances[:,1])
-    if display:
-        plt.hist(significance, bins=100)
-        plt.show()
-    moving_idx = np.where(significance < significance_threshold)[0]
-    stationary_idx = indices[moving_idx][:,0]
-    nb_matches = stationary_idx.shape[0]
-    # print(f'Matches after filtering: {nb_matches}')
-    return stationary_idx, moving_idx
+def find_similar(feat_stationary, feat_moving):
+    feature_nbrs = NearestNeighbors(n_neighbors=1, algorithm='kd_tree', n_jobs=-1).fit(feat_moving)
+    return feature_nbrs.kneighbors(feat_stationary)
+
+
+def neighborhood_matching(args):
+    pt_stationary_feat, pts_moving_feat, pts_moving_idx, prominence_thresh, max_feat_dist = args
+    if len(pts_moving_idx) > 1:
+        feat_distances = cdist(pt_stationary_feat.reshape(1, -1), pts_moving_feat)[0]
+        nearest_two = np.argsort(feat_distances)[:2]
+        prominence = feat_distances[nearest_two[0]] / (1e-9 + feat_distances[nearest_two[1]])
+        if prominence < prominence_thresh and feat_distances[nearest_two[0]] < max_feat_dist:
+            return pts_moving_idx[nearest_two[0]]
+
+
+def match_pts(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat_dist, prominence_thresh, max_distance, nb_workers, display=False):
+    spatial_nbrs = NearestNeighbors(radius=max_distance, algorithm='kd_tree', n_jobs=-1).fit(pts_moving)
+    distances, neighborhoods = spatial_nbrs.radius_neighbors(pts_stationary)
+
+    # neighborhoods are indices of nearby points in moving image, so nb_neighborhoods == len(pts_stationary)
+    # indices is a vector of vectors that contain the points within a radius of max distance
+
+    args = []
+    for i, (feat_stationary_i, nbrhood) in enumerate(zip(feat_stationary, neighborhoods)):
+        args.append((feat_stationary_i, feat_moving[nbrhood], nbrhood, prominence_thresh, max_feat_dist))
+
+    chunksize = min(2, int(len(pts_stationary)/nb_workers))
+
+    with multiprocessing.Pool(nb_workers) as pool:
+        results = list(tqdm.tqdm(pool.imap(neighborhood_matching, args, chunksize=chunksize),
+                                 total=len(pts_stationary)))
+
+    stationary_matches = [i for i, j in enumerate(results) if j is not None]
+    moving_matches = [j for j in results if j is not None]
+    print('Found {} matches.'.format(len(moving_matches)))
+
+    return stationary_matches, moving_matches
 
 
 def augment(pts):
@@ -144,7 +164,7 @@ def augment(pts):
 
 def augmented_matrix(pts):
     nb_pts = pts.shape[0]
-    submatrix = augment(pts)
+    submatrix = augment(pts)  # [z, y, x, 1]
     A = np.zeros((3*nb_pts, 12))
     A[:nb_pts,:4] = submatrix
     A[nb_pts:2*nb_pts,4:8] = submatrix
