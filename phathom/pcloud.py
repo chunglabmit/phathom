@@ -123,32 +123,45 @@ def find_similar(feat_stationary, feat_moving):
     return feature_nbrs.kneighbors(feat_stationary)
 
 
+def neighborhood_init(external_spatial_kdtree, external_feat_moving):
+    global spatial_kdtree
+    global feat_moving
+    spatial_kdtree = external_spatial_kdtree
+    feat_moving = external_feat_moving
+
+
 def neighborhood_matching(args):
-    pt_stationary_feat, pts_moving_feat, pts_moving_idx, prominence_thresh, max_feat_dist = args
-    if len(pts_moving_idx) > 1:
+    pt_stationary, pt_stationary_feat, prominence_thresh, max_feat_dist = args
+
+    # spatial_kdtree is copied to the global scope of each subprocess
+    nbrhoods = spatial_kdtree.radius_neighbors(pt_stationary.reshape(1, -1), return_distance=False)
+    nbrhood = nbrhoods[0]  # nbrhoods is a list of arrays (jagged)
+
+    pts_moving_feat = feat_moving[nbrhood]
+
+    if len(nbrhood) > 1:
         feat_distances = cdist(pt_stationary_feat.reshape(1, -1), pts_moving_feat)[0]
         nearest_two = np.argsort(feat_distances)[:2]
         prominence = feat_distances[nearest_two[0]] / (1e-9 + feat_distances[nearest_two[1]])
         if prominence < prominence_thresh and feat_distances[nearest_two[0]] < max_feat_dist:
-            return pts_moving_idx[nearest_two[0]]
+            return nbrhood[nearest_two[0]]
 
 
 def match_pts(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat_dist, prominence_thresh, max_distance, nb_workers, display=False):
+    print('building kd-tree')
     spatial_nbrs = NearestNeighbors(radius=max_distance, algorithm='kd_tree', n_jobs=-1).fit(pts_moving)
-    distances, neighborhoods = spatial_nbrs.radius_neighbors(pts_stationary)
 
-    # neighborhoods are indices of nearby points in moving image, so nb_neighborhoods == len(pts_stationary)
-    # indices is a vector of vectors that contain the points within a radius of max distance
+    # Building the kd-tree is fast, but the radius neighbors cannot be held in memory
+    # The radius neighbors should be part of the neighboorhood matching within subprocesses
 
+    print('building arguments list')
     args = []
-    for i, (feat_stationary_i, nbrhood) in enumerate(zip(feat_stationary, neighborhoods)):
-        args.append((feat_stationary_i, feat_moving[nbrhood], nbrhood, prominence_thresh, max_feat_dist))
+    for i, pt_stationary in tqdm.tqdm(enumerate(pts_stationary), total=len(pts_stationary)):
+        args.append((pt_stationary, feat_stationary[i], prominence_thresh, max_feat_dist))
 
-    chunksize = min(2, int(len(pts_stationary)/nb_workers))
-
-    with multiprocessing.Pool(nb_workers) as pool:
-        results = list(tqdm.tqdm(pool.imap(neighborhood_matching, args, chunksize=chunksize),
-                                 total=len(pts_stationary)))
+    print('finding neighborhood matches')
+    with multiprocessing.Pool(processes=nb_workers, initializer=neighborhood_init, initargs=(spatial_nbrs, feat_moving)) as pool:
+        results = list(tqdm.tqdm(pool.imap(neighborhood_matching, args, chunksize=10), total=len(pts_stationary)))
 
     stationary_matches = [i for i, j in enumerate(results) if j is not None]
     moving_matches = [j for j in results if j is not None]
@@ -166,9 +179,9 @@ def augmented_matrix(pts):
     nb_pts = pts.shape[0]
     submatrix = augment(pts)  # [z, y, x, 1]
     A = np.zeros((3*nb_pts, 12))
-    A[:nb_pts,:4] = submatrix
-    A[nb_pts:2*nb_pts,4:8] = submatrix
-    A[2*nb_pts:,8:] = submatrix
+    A[:nb_pts, :4] = submatrix
+    A[nb_pts:2*nb_pts, 4:8] = submatrix
+    A[2*nb_pts:, 8:] = submatrix
     return A
 
 
