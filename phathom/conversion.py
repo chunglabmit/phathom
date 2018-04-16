@@ -8,14 +8,20 @@ tiffs_to_zarr - save directory with 2D tifs into a chunked zarr array
 tiff_to_zarr - save a 3D tif as a chunked zarr array
 ims_to_tiffs - save the z-slices in a terastitcher Imaris file to tiffs
 ims_to_zarr - save a terastitcher Imaris file into a chunked zarr array
+downsample_zarr - downsample a chunked zarr array in parallel
+rechunk_zarr - copy a zarr array with new parameters
 """
 from . import utils
 import skimage.external.tifffile as tifffile
+from skimage.transform import downscale_local_mean
 import zarr
 import numpy as np
 import multiprocessing
 import h5py
 import os
+from itertools import product
+from sys import stdout
+import tqdm
 
 
 def imread(path):
@@ -27,13 +33,14 @@ def imread(path):
     return tifffile.imread(files=path)
 
 
-def imsave(path, data):
+def imsave(path, data, compress=0):
     """ Saves numpy array as a TIF image.
 
     :param path: path to tif image to create / overwrite
     :param data: numpy ndarray with image data
+    :param compress: int (0-9) indicating the degree of lossless compression
     """
-    tifffile.imsave(file=path, data=data)
+    tifffile.imsave(file=path, data=data, compress=compress)
 
 
 def write_chunk(data, z_arr, start):
@@ -45,6 +52,7 @@ def write_chunk(data, z_arr, start):
 
 
 def read_tifs(tif_paths):
+    # TODO: fixed hard-coded nb_workers
     img = imread(tif_paths[0])
     shape = (len(tif_paths), *img.shape)
     data = np.zeros(shape, dtype=img.dtype)
@@ -54,7 +62,7 @@ def read_tifs(tif_paths):
 
 
 def tifs_to_zarr_chunks(z_arr, tif_paths, start_list):
-    data = read_tifs(tif_paths) # read tiffs in parallel
+    data = read_tifs(tif_paths)  # read tiffs in parallel
 
     args = []
     for start in start_list:
@@ -127,19 +135,28 @@ def tif_to_zarr(tif_path, zarr_path, chunks, in_memory=False):
                 z_arr[i] = img
 
 
-def slice_to_tiff(arr, idx, output_dir):
+def slice_to_tiff(arr, idx, output_dir, compress):
+    """ Save a slice of a zarr array to disk
+
+    :param arr: Input zarr array
+    :param idx: z-slice index to save
+    :param output_dir: output directory
+    :param compress: degree of lossless tiff compresion
+    :return:
+    """
     img = arr[idx]
     filename = '{0:04d}.tif'.format(idx)
     path = os.path.join(output_dir, filename)
-    imsave(path, img)
+    imsave(path, img, compress=compress)
 
 
-def zarr_to_tifs(zarr_path, output_dir, nb_workers=1, in_memory=False):
+def zarr_to_tifs(zarr_path, output_dir, nb_workers=1, compress=0, in_memory=False):
     """ Convert zarr array into tiffs
 
     :param zarr_path: path to input zarr array
     :param output_dir: path to output directory
     :param nb_workers: number of parallel processes for writing
+    :param compress: degree of lossless tiff compression
     :param in_memory: boolean indicating if the zarr array should be loaded into memory
     :return:
     """
@@ -153,7 +170,7 @@ def zarr_to_tifs(zarr_path, output_dir, nb_workers=1, in_memory=False):
         with multiprocessing.Pool(nb_workers) as pool:
             args = []
             for z in range(z_arr.shape[0]):
-                args.append((z_arr, z, output_dir))
+                args.append((z_arr, z, output_dir, compress))
             pool.starmap(slice_to_tiff, args)
 
 
@@ -245,6 +262,86 @@ def ims_to_zarr(ims_path, zarr_path, chunks, nb_workers):
         pool.starmap(ims_chunk_to_zarr, args)
 
 
+def downsample_chunk(args):
+    """ Downsample a zarr array chunk and write it to another zarr array as a smaller chunk
+    
+    :param z_arr_in: input zarr array
+    :param z_arr_out: ouput zarr array
+    :param chunk_idx: array-like of chunk indices
+    :param factors: array-like of float downsampling factors
+    :return: 
+    """""
+    z_arr_in, z_arr_out, chunk_idx, factors = args
+
+    in_start = np.array([i*c for i, c in zip(chunk_idx, z_arr_in.chunks)])
+    in_stop = np.array([(i+1)*c if (i+1)*c < s else s for i, c, s in zip(chunk_idx, z_arr_in.chunks, z_arr_in.shape)])
+
+    data = z_arr_in[in_start[0]:in_stop[0], in_start[1]:in_stop[1], in_start[2]:in_stop[2]]
+
+    down_data = downscale_local_mean(image=data, factors=factors)
+
+    out_start = np.array([i*c for i, c in zip(chunk_idx, z_arr_out.chunks)])
+    out_stop = np.array([(i+1)*c if (i+1)*c < s else s for i, c, s in zip(chunk_idx, z_arr_out.chunks, z_arr_out.shape)])
+
+    z_arr_out[out_start[0]:out_stop[0], out_start[1]:out_stop[1], out_start[2]:out_stop[2]] = down_data
+
+
+def downsample_zarr(z_arr_in, factors, output_path, nb_workers=1, **kwargs):
+    """ Downsample a chunked zarr array in parallel
+
+    :param z_arr_in: input zarr array
+    :param factors: tuple of floats with downsample factors
+    :param output_path: path for the output zarr array
+    :param kwargs: additional keyword arguments passed to zarr.open()
+    :param nb_workers: number of workers to downsample in parallel
+    :return:
+    """
+
+    if kwargs.pop('chunks', None) is not None:
+        raise ValueError('chunks will be determined by the downsampling factors')
+
+    if z_arr_in.chunks is None:
+        raise ValueError('input zarr array must contain chunks')
+
+    shape = np.array([np.ceil(s/f) for s, f in zip(z_arr_in.shape, factors)])
+    chunks = np.array([int(i/f) for i, f in zip(z_arr_in.chunks, factors)])
+
+    z_arr_out = zarr.open(output_path, mode='w', shape=shape, chunks=chunks, dtype=z_arr_in.dtype, **kwargs)
+    nb_chunks = utils.chunk_dims(z_arr_in.shape, z_arr_in.chunks)
+
+    args = []
+    for chunk_idx in product(*tuple(range(n) for n in nb_chunks)):
+        args.append((z_arr_in, z_arr_out, chunk_idx, factors))
+
+    with multiprocessing.Pool(processes=nb_workers) as pool:
+        list(tqdm.tqdm(pool.imap(downsample_chunk, args), total=len(args)))
+
+
+def fetch_and_write_chunk(source, dest, dest_chunk_idx):
+    start = np.array(dest_chunk_idx) * np.array(dest.chunks)
+    stop = np.array([(i+1)*c if (i+1)*c <= s else s for i, c, s in zip(dest_chunk_idx, dest.chunks, dest.shape)])
+    data = source[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]]
+    write_chunk(data, dest, start)
+
+
+def rechunk_zarr(source, dest, nb_workers):
+    """ Copy a chunked zarr array to a new zarr array with different parameters
+
+    :param source: source zarr array
+    :param dest: destination zarr array
+    :param nb_workers: number of workers to write in parallel
+    :return:
+    """
+    nb_chunks = utils.chunk_dims(dest.shape, dest.chunks)
+
+    args = []
+    for chunk_idx in product(*tuple(range(n) for n in nb_chunks)):
+        args.append((source, dest, chunk_idx))
+
+    with multiprocessing.Pool(nb_workers) as pool:
+        pool.starmap(fetch_and_write_chunk, args)
+
+
 def main():
     tif_dir = 'D:/Justin/coregistration/fixed/C0/zslices'
     zarr_path = 'D:/Justin/coregistration/fixed/C0/fixed.zarr'
@@ -254,11 +351,34 @@ def main():
 
     # tifs_to_zarr(tif_dir, zarr_path, chunks)
 
-    zarr_path = 'D:/Justin/coregistration/moving/C0/roi1_registered3.zarr'
-    tif_path = 'D:/Justin/coregistration/moving/C0/roi1_registered3_tifs/'
-    # zarr_to_tifs(zarr_path, tif_path, nb_workers)
+    # zarr_path = 'D:/Justin/coregistration/moving/C0/roi1_registered3.zarr'
+    # tif_path = 'D:/Justin/coregistration/moving/C0/roi1_registered3_tifs/'
+    # zarr_to_tifs(zarr_path, tif_path, nb_workers=8)
 
+    source_zarr_path = 'D:/Justin/coregistration/fixed/C0/fixed.zarr'
+    dest_zarr_path = 'D:/Justin/coregistration/fixed/C0/fixed_int.zarr'
+    from numcodecs import Blosc
 
+    # downsample_zarr(zarr.open(zarr_path), (8, 8, 8), downsample_path, nb_workers=12, compression=Zstd(level=1))
+    #
+    # tif_path = 'D:/Justin/coregistration/moving/C0/roi1_downsampled8'
+    # zarr_to_tifs(downsample_path, tif_path, nb_workers=8)
+
+    source_zarr_path = 'D:/Justin/coregistration/fixed/C0/fixed.zarr'
+    dest_zarr_path = 'D:/Justin/coregistration/fixed/C0/fixed_int.zarr'
+
+    source = zarr.open(source_zarr_path, mode='r')
+    dest = zarr.open(dest_zarr_path,
+                     mode='w',
+                     shape=source.shape,
+                     chunks=source.chunks,
+                     dtype='uint16',
+                     compression=Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE))
+
+    import time
+    t0 = time.time()
+    rechunk_zarr(source, dest, 44)
+    print('Elapsed time: {sec:.1f} seconds'.format(sec=time.time()-t0))
 
 
 if __name__ == '__main__':
