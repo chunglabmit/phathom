@@ -142,7 +142,7 @@ def detect_blobs(bbox, z_arr, sigma, min_distance, min_intensity):
     return peaks
 
 
-def detect_blobs_parallel(z_arr, sigma, min_distance, min_intensity, nb_workers, overlap):
+def detect_blobs_parallel(z_arr, sigma, min_distance, min_intensity, overlap):
     """ Detects blobs in a chunked zarr array in parallel using local maxima
 
     :param z_arr: input zarr array
@@ -156,23 +156,26 @@ def detect_blobs_parallel(z_arr, sigma, min_distance, min_intensity, nb_workers,
                                     sigma=sigma,
                                     min_distance=min_distance,
                                     min_intensity=min_intensity)
-    chunk_gen = chunk_generator(z_arr, overlap)
+    chunks = list(chunk_generator(z_arr, overlap))
 
     pts_list = []
-    with multiprocessing.Pool(nb_workers) as pool:
-        r = list(tqdm.tqdm(pool.imap(detect_blobs_in_chunk, chunk_gen), total=len(starts)))
-        for i, pts_local in enumerate(r):
-            chunk_coord = np.array(chunk_coords[i])
-            start = np.array(starts[i])
+    r = list(tqdm.tqdm(utils.parallel_map(detect_blobs_in_chunk, chunks),
+                       total=len(chunks)))
+    for i, pts_local in enumerate(r):
+        if len(pts_local) == 0:
+            continue
+        chunk_coord = np.array(chunk_coords[i])
+        start = np.array(starts[i])
 
-            local_start = chunk_coord - start
-            local_stop = local_start + np.array(z_arr.chunks)
+        local_start = chunk_coord - start
+        local_stop = local_start + np.array(z_arr.chunks)
 
-            idx = np.all(np.logical_and(local_start <= pts_local, pts_local < local_stop), axis=1)
-            pts_trim = pts_local[idx]
+        idx = np.all(np.logical_and(local_start <= pts_local, pts_local < local_stop), axis=1)
+        pts_trim = pts_local[idx]
 
-            pts_list.append(pts_trim + start)
-
+        pts_list.append(pts_trim + start)
+    if len(pts_list) == 0:
+        return np.zeros((0, 3))
     return np.concatenate(pts_list)
 
 
@@ -354,6 +357,7 @@ def register(moving_img, fixed_img, output_img, transformation, nb_workers, batc
 
     with multiprocessing.Pool(processes=nb_workers) as pool:
         pool.starmap(register_chunk, args_list)
+
 
 
 def genetic_optimization():

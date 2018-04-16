@@ -2,6 +2,8 @@ import os
 import pickle
 import numpy as np
 from itertools import product
+import pyina.launchers
+from pyina.ez_map import ez_map
 
 # TODO: Convert utils.py module to use pathlib module
 
@@ -23,7 +25,7 @@ def files_in_dir(path):
     :param path: path of the directory to check for files
     :return: list of all files in the input path
     """
-    return os.listdir(path)
+    return sorted(os.listdir(path))
 
 
 def tifs_in_dir(path):
@@ -93,3 +95,45 @@ def chunk_coordinates(shape, chunks):
     for indices in product(*tuple(range(n) for n in nb_chunks)):
         start.append(tuple(i*c for i, c in zip(indices, chunks)))
     return start
+
+mapper = None
+
+def parallel_map(fn, args):
+    """Map a function over an argument list, returning one result per arg
+
+    :param fn: the function to execute
+    :param args: a list of the single argument to send through the function
+                 per invocation
+    :returns: a list of results.
+
+    Usage:
+        myresults = parallel_map(my_function, my_inputs)
+
+    Configuration:
+        The mapper is configured by two environment variables:
+
+        PHATHOM_MAPPER - this is the name of one of the mapper classes. Typical
+                         choices are MpiPool or MpiScatter for OpenMPI and
+                         SlurmPool or SlurmScatter for SLURM. By default, it
+                         uses the serial mapper which runs on a single thread.
+
+        PHATHOM_NODES - this is the number of nodes that should be used in
+                        parallel.
+
+    By default, a serial mapper is returned if there is no mapper.
+    """
+    global mapper
+
+    if mapper is None:
+        if "PHATHOM_MAPPER" in os.environ:
+            mapper_name = os.environ["PHATHOM_MAPPER"]
+            mapper_class = getattr(pyina.launchers, mapper_name)
+            if "PHATHOM_NODES" in os.environ:
+                nodes = os.environ["PHATHOM_NODES"]
+                mapper = mapper_class(nodes)
+            else:
+                mapper = mapper_class()
+        else:
+            mapper = pyina.launchers.SerialMapper()
+
+    return mapper.map(fn, args)

@@ -2,6 +2,9 @@ matplotlib
 numpy
 scipy
 scikit-image
+scikit-learn
 PyMaxflow
 zarr
 h5py
+https://github.com/chunglabmit/pyina/archive/leek-python3.zip
+tqdm
