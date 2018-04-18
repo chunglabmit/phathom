@@ -100,14 +100,14 @@ def geometric_hash(center, vectors):
 
 def geometric_features(pts, nb_workers):
     # Performance params available: leaf_size and n_jobs
-    nbrs = NearestNeighbors(n_neighbors=3, algorithm='kd_tree', n_jobs=-1).fit(pts)
+    nbrs = NearestNeighbors(n_neighbors=4, algorithm='kd_tree', n_jobs=-1).fit(pts)
 
     distances, indices = nbrs.kneighbors(pts)
     # indices is len(pts) by 3, in order of decreasing distance
 
     args = []
-    for center, row in zip(pts, indices):
-        args.append((center, pts[row]))
+    for i, (center, row) in enumerate(zip(pts, indices)):
+        args.append((center, pts[row[1:]]))
 
     with multiprocessing.Pool(processes=nb_workers) as pool:
         features = pool.starmap(geometric_hash, args)
@@ -167,6 +167,19 @@ def match_pts(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat
     moving_matches = [j for j in results if j is not None]
     print('Found {} matches.'.format(len(moving_matches)))
 
+    return stationary_matches, moving_matches
+
+
+def match_pts_global(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat_dist, prominence_thresh, max_distance, nb_workers):
+    moving_nbrs = NearestNeighbors(n_neighbors=2, algorithm='kd_tree', n_jobs=-1).fit(feat_moving)
+    distances, indices = moving_nbrs.kneighbors(feat_stationary)
+    stationary_matches = []
+    moving_matches = []
+    for i, (idxs, dists) in enumerate(zip(indices, distances)):
+        prominence = dists[0] / (1e-9 + dists[1])
+        if prominence < prominence_thresh and dists[0] < max_feat_dist:
+            stationary_matches.append(i)
+            moving_matches.append(idxs[0])
     return stationary_matches, moving_matches
 
 

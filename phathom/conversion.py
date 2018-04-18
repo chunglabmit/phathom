@@ -107,7 +107,7 @@ def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False):
             tifs_to_zarr_chunks(z_arr, tif_paths[z0:z1], start_list[k0:k1])
 
 
-def tif_to_zarr(tif_path, zarr_path, chunks, in_memory=False):
+def tif_to_zarr(tif_path, zarr_path, chunks, in_memory=False, **kwargs):
     """ Load a 3D tif image into a persistent zarr array.
 
     :param tif_path: path to a 3D tif image
@@ -118,7 +118,7 @@ def tif_to_zarr(tif_path, zarr_path, chunks, in_memory=False):
     """
     if in_memory:
         data = imread(tif_path)
-        zarr.save_array(zarr_path, data, chunks=chunks)
+        zarr.save_array(zarr_path, data, chunks=chunks, **kwargs)
     else:
         with tifffile.TiffFile(tif_path) as tif:
             ij_metadata = tif.imagej_metadata
@@ -128,7 +128,7 @@ def tif_to_zarr(tif_path, zarr_path, chunks, in_memory=False):
             shape = (nb_slices, *first_slice.shape)
             dtype = first_slice.dtype
 
-            z_arr = zarr.open(zarr_path, mode='w', shape=shape, chunks=chunks, dtype=dtype)
+            z_arr = zarr.open(zarr_path, mode='w', shape=shape, chunks=chunks, dtype=dtype, **kwargs)
 
             for i in range(nb_slices):
                 img = tif.asarray(key=i)
