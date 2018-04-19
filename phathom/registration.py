@@ -465,29 +465,29 @@ def rigid_registration():
 def main():
     # Input images
     voxel_dimensions = (2.0, 1.6, 1.6)
-    fixed_zarr_path = 'D:/coregistration/fixed.zarr'
-    moving_zarr_path = 'D:/coregistration/moving.zarr'
-    registered_zarr_path = 'D:/coregistration/registered_affine.zarr'
-    preview_zarr_path = 'D:/coregistration/registered_preview.zarr'
-    preview_tif_path = 'D:/coregistration/registered_preview.tif'
+    fixed_zarr_path = 'E:/Justin/coregistration/1mm_slice/fixed.zarr'
+    moving_zarr_path = 'E:/Justin/coregistration/1mm_slice/moving.zarr'
+    registered_zarr_path = 'E:/Justin/coregistration/1mm_slice/registered_affine.zarr'
+    preview_zarr_path = 'E:/Justin/coregistration/1mm_slice/registered_preview.zarr'
+    preview_tif_path = 'E:/Justin/coregistration/1mm_slice/registered_preview.tif'
     # Caching intermediate data
-    fixed_pts_path = 'D:/coregistration/fixed_pts.npy'
-    moving_pts_path = 'D:/coregistration/moving_pts.npy'
-    fixed_pts_img_path = 'D:/coregistration/fixed_pts.tif'
-    moving_pts_img_path = 'D:/coregistration/moving_pts.tif'
-    fixed_matches_img_path = 'D:/coregistration/fixed_matches.tif'
-    moving_matches_img_path = 'D:/coregistration/moving_matches.tif'
-    fixed_features_path = 'D:/coregistration/fixed_features.npy'
-    moving_features_path = 'D:/coregistration/moving_features.npy'
-    fixed_idx_path = 'D:/coregistration/fixed_idx.npy'
-    moving_idx_path = 'D:/coregistration/moving_idx.npy'
+    fixed_pts_path = 'E:/Justin/coregistration/1mm_slice/fixed_pts.npy'
+    moving_pts_path = 'E:/Justin/coregistration/1mm_slice/moving_pts.npy'
+    fixed_pts_img_path = 'E:/Justin/coregistration/1mm_slice/fixed_pts.tif'
+    moving_pts_img_path = 'E:/Justin/coregistration/1mm_slice/moving_pts.tif'
+    fixed_matches_img_path = 'E:/Justin/coregistration/1mm_slice/fixed_matches.tif'
+    moving_matches_img_path = 'E:/Justin/coregistration/1mm_slice/moving_matches.tif'
+    fixed_features_path = 'E:/Justin/coregistration/1mm_slice/fixed_features.npy'
+    moving_features_path = 'E:/Justin/coregistration/1mm_slice/moving_features.npy'
+    fixed_idx_path = 'E:/Justin/coregistration/1mm_slice/fixed_idx.npy'
+    moving_idx_path = 'E:/Justin/coregistration/1mm_slice/moving_idx.npy'
     # Processing
     nb_workers = 2
     overlap = 8
     # Keypoints
     sigma = (1.2, 2.0, 2.0)
     min_distance = 3
-    min_intensity = 400
+    min_intensity = 450
     # Density maps
     bin_size_um = 100
     sigma_density = 1.0
@@ -511,26 +511,26 @@ def main():
     fixed_img = zarr.open(fixed_zarr_path, mode='r')
     moving_img = zarr.open(moving_zarr_path, mode='r')
 
-    # print('detecting keypoints')
-    # t1 = time.time()
-    # fixed_pts = detect_blobs_parallel(fixed_img, sigma, min_distance, min_intensity, nb_workers, overlap)
-    # moving_pts = detect_blobs_parallel(moving_img, sigma, min_distance, min_intensity, nb_workers, overlap)
-    # t2 = time.time()
-    # print('  found {} keypoints in fixed image'.format(len(fixed_pts)))
-    # print('  found {} keypoints in moving image'.format(len(moving_pts)))
-    # print('  Took {0:.2f} seconds'.format(t2-t1))
-    # 
-    # print('saving keypoint locations and images')
-    # np.save(fixed_pts_path, fixed_pts)
-    # np.save(moving_pts_path, moving_pts)
-    # fixed_blob_arr = mark_pts(np.zeros(fixed_img.shape, dtype='uint8'), fixed_pts)
-    # moving_blob_arr = mark_pts(np.zeros(moving_img.shape, dtype='uint8'), moving_pts)
-    # conversion.imsave(fixed_pts_img_path, fixed_blob_arr, compress=1)
-    # conversion.imsave(moving_pts_img_path, moving_blob_arr, compress=1)
+    print('detecting keypoints')
+    t1 = time.time()
+    fixed_pts = detect_blobs_parallel(fixed_img, sigma, min_distance, min_intensity, nb_workers, overlap)
+    moving_pts = detect_blobs_parallel(moving_img, sigma, min_distance, min_intensity, nb_workers, overlap)
+    t2 = time.time()
+    print('  found {} keypoints in fixed image'.format(len(fixed_pts)))
+    print('  found {} keypoints in moving image'.format(len(moving_pts)))
+    print('  Took {0:.2f} seconds'.format(t2-t1))
 
-    print('loading precalculated keypoints')
-    fixed_pts = np.load(fixed_pts_path)
-    moving_pts = np.load(moving_pts_path)
+    print('saving keypoint locations and images')
+    np.save(fixed_pts_path, fixed_pts)
+    np.save(moving_pts_path, moving_pts)
+    fixed_blob_arr = mark_pts(np.zeros(fixed_img.shape, dtype='uint8'), fixed_pts)
+    moving_blob_arr = mark_pts(np.zeros(moving_img.shape, dtype='uint8'), moving_pts)
+    conversion.imsave(fixed_pts_img_path, fixed_blob_arr, compress=1)
+    conversion.imsave(moving_pts_img_path, moving_blob_arr, compress=1)
+
+    # print('loading precalculated keypoints')
+    # fixed_pts = np.load(fixed_pts_path)
+    # moving_pts = np.load(moving_pts_path)
 
     print('performing coarse registration')
     t1 = time.time()
@@ -553,122 +553,122 @@ def main():
     np.save(fixed_features_path, fixed_features)
     np.save(moving_features_path, moving_features)
 
-    print('loading precalculated features')
-    fixed_features = np.load(fixed_features_path)
-    moving_features = np.load(moving_features_path)
+    # print('loading precalculated features')
+    # fixed_features = np.load(fixed_features_path)
+    # moving_features = np.load(moving_features_path)
 
-    # # Find CoM (TUP offsets in um)
-    # fixed_centroid_um = fixed_pts_um.mean(axis=0)
-    # moving_centroid_um = moving_pts_um.mean(axis=0)
-    # print('  fixed center of mass (um): {}'.format(fixed_centroid_um))
-    # print('  moving center of mass (um): {}'.format(moving_centroid_um))
-    # 
-    # # Calculate histogram bins and bounds
-    # fixed_bins = np.ceil(fixed_img_shape_um / bin_size_um)
-    # moving_bins = np.ceil(moving_img_shape_um / bin_size_um)
-    # print('  fixed bin shape: {}'.format(fixed_bins))
-    # print('  moving bin shape: {}'.format(moving_bins))
-    # fixed_density_shape_um = fixed_bins * bin_size_um
-    # moving_density_shape_um = moving_bins * bin_size_um
-    # print('  fixed density shape (um): {}'.format(fixed_density_shape_um))
-    # print('  moving density shape (um): {}'.format(moving_density_shape_um))
-    # fixed_density_excess_um = fixed_density_shape_um - fixed_img_shape_um
-    # moving_density_excess_um = moving_density_shape_um - moving_img_shape_um
-    # print('  fixed density excess (um): {}'.format(fixed_density_excess_um))
-    # print('  moving density excess (um): {}'.format(moving_density_excess_um))
-    # fixed_density_range_um = np.array((-fixed_density_excess_um/2, fixed_img_shape_um+fixed_density_excess_um/2))
-    # moving_density_range_um = np.array((-moving_density_excess_um/2, moving_img_shape_um+fixed_density_excess_um/2))
-    # print('  fixed density range (um): {}'.format(fixed_density_range_um))
-    # print('  moving density range (um): {}'.format(moving_density_range_um))
-    # 
-    # # Calculate histograms
-    # print('  calculating fixed histogram')
-    # fixed_density, fixed_edges = np.histogramdd(fixed_pts_um, bins=fixed_bins, range=fixed_density_range_um.T)
-    # print('  calculating moving histogram')
-    # moving_density, moving_edges = np.histogramdd(moving_pts_um, bins=moving_bins, range=moving_density_range_um.T)
-    # 
-    # def transform_density(theta, moving):
-    #     r = rotation_matrix(theta)
-    #     fixed_coords = shape_to_coordinates(fixed_density.shape)
-    #     fixed_coords_um = fixed_coords * bin_size_um + fixed_density_range_um[0]
-    #     fixed_coords_um_zeroed = fixed_coords_um - fixed_centroid_um
-    #     rotated_coords_um_zeroed = rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
-    #     moving_coords_um = rotated_coords_um_zeroed + moving_centroid_um
-    #     moving_coords = moving_coords_um / bin_size_um
-    #     interp_values = interpolate(moving, moving_coords, order=3)
-    #     transformed = np.reshape(interp_values, fixed_density.shape)
-    #     return transformed
-    # 
-    # def registration_objective(theta, fixed, moving):
-    #     transformed = transform_density(theta, moving)
-    #     return -ncc(fixed, transformed)
-    # 
-    # print('  smoothing the histograms')
-    # fixed_density_smooth = filters.gaussian(fixed_density, sigma=sigma_density)
-    # moving_density_smooth = filters.gaussian(moving_density, sigma=sigma_density)
-    # 
-    # res = basinhopping(registration_objective,
-    #                    x0=np.array([0, 0, 0]),
-    #                    niter=niter,
-    #                    T=1.0,
-    #                    stepsize=0.5,
-    #                    minimizer_kwargs={
-    #                        'method': 'L-BFGS-B',
-    #                        'args': (fixed_density, moving_density),
-    #                        'bounds': [(0, 2*np.pi) for _ in range(3)],
-    #                        'tol': 0.01,
-    #                        'options': {'disp': False}
-    #                    },
-    #                    disp=True)
-    # thetas = res.x
-    # t2 = time.time()
-    # print('  converged theta (deg): {}'.format(thetas / np.pi * 180))
-    # print('  Final correlation coefficient: {}'.format(-res.fun))
-    # print('  Took {0:.2f} seconds'.format(t2 - t1))
-    # 
-    # # registered_density = transform_density(thetas, moving_density)
-    # # registered_density_smooth = transform_density(thetas, moving_density_smooth)
-    # 
-    # # plot_densities(fixed_density_smooth,
-    # #                moving_density_smooth,
-    # #                registered_density_smooth,
-    # #                mip=False,
-    # #                z=1,
-    # #                clim=[0, 15])
-    # 
-    # print('transforming the fixed point cloud')
-    # t1 = time.time()
-    # 
-    # def transform_pts(theta, pts_um):
-    #     r = rotation_matrix(theta)
-    #     fixed_coords_um_zeroed = pts_um - fixed_centroid_um
-    #     rotated_coords_um_zeroed = rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
-    #     transformed_coords_um = rotated_coords_um_zeroed + moving_centroid_um
-    #     return transformed_coords_um
-    # 
-    # transformed_pts_um = transform_pts(thetas, fixed_pts_um)
-    # t2 = time.time()
-    # print('  Took {0:.2f} seconds'.format(t2-t1))
+    # Find CoM (TUP offsets in um)
+    fixed_centroid_um = fixed_pts_um.mean(axis=0)
+    moving_centroid_um = moving_pts_um.mean(axis=0)
+    print('  fixed center of mass (um): {}'.format(fixed_centroid_um))
+    print('  moving center of mass (um): {}'.format(moving_centroid_um))
 
-    # print('matching points')
-    # t1 = time.time()
-    # fixed_idx, moving_idx = pcloud.match_pts(fixed_pts_um,
-    #                                          moving_pts_um,
-    #                                          fixed_features,
-    #                                          moving_features,
-    #                                          max_feat_dist,
-    #                                          prominence_thresh,
-    #                                          max_distance,
-    #                                          nb_workers)
-    # print('  found {} matches for {} cells'.format(len(fixed_idx), len(fixed_pts)))
-    # 
-    # print('saving matching indices')
-    # np.save(fixed_idx_path, fixed_idx)
-    # np.save(moving_idx_path, moving_idx)
+    # Calculate histogram bins and bounds
+    fixed_bins = np.ceil(fixed_img_shape_um / bin_size_um)
+    moving_bins = np.ceil(moving_img_shape_um / bin_size_um)
+    print('  fixed bin shape: {}'.format(fixed_bins))
+    print('  moving bin shape: {}'.format(moving_bins))
+    fixed_density_shape_um = fixed_bins * bin_size_um
+    moving_density_shape_um = moving_bins * bin_size_um
+    print('  fixed density shape (um): {}'.format(fixed_density_shape_um))
+    print('  moving density shape (um): {}'.format(moving_density_shape_um))
+    fixed_density_excess_um = fixed_density_shape_um - fixed_img_shape_um
+    moving_density_excess_um = moving_density_shape_um - moving_img_shape_um
+    print('  fixed density excess (um): {}'.format(fixed_density_excess_um))
+    print('  moving density excess (um): {}'.format(moving_density_excess_um))
+    fixed_density_range_um = np.array((-fixed_density_excess_um/2, fixed_img_shape_um+fixed_density_excess_um/2))
+    moving_density_range_um = np.array((-moving_density_excess_um/2, moving_img_shape_um+fixed_density_excess_um/2))
+    print('  fixed density range (um): {}'.format(fixed_density_range_um))
+    print('  moving density range (um): {}'.format(moving_density_range_um))
 
-    print('Loading cached matches')
-    fixed_idx = np.load(fixed_idx_path)
-    moving_idx = np.load(moving_idx_path)
+    # Calculate histograms
+    print('  calculating fixed histogram')
+    fixed_density, fixed_edges = np.histogramdd(fixed_pts_um, bins=fixed_bins, range=fixed_density_range_um.T)
+    print('  calculating moving histogram')
+    moving_density, moving_edges = np.histogramdd(moving_pts_um, bins=moving_bins, range=moving_density_range_um.T)
+
+    def transform_density(theta, moving):
+        r = rotation_matrix(theta)
+        fixed_coords = shape_to_coordinates(fixed_density.shape)
+        fixed_coords_um = fixed_coords * bin_size_um + fixed_density_range_um[0]
+        fixed_coords_um_zeroed = fixed_coords_um - fixed_centroid_um
+        rotated_coords_um_zeroed = rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
+        moving_coords_um = rotated_coords_um_zeroed + moving_centroid_um
+        moving_coords = moving_coords_um / bin_size_um
+        interp_values = interpolate(moving, moving_coords, order=3)
+        transformed = np.reshape(interp_values, fixed_density.shape)
+        return transformed
+
+    def registration_objective(theta, fixed, moving):
+        transformed = transform_density(theta, moving)
+        return -ncc(fixed, transformed)
+
+    print('  smoothing the histograms')
+    fixed_density_smooth = filters.gaussian(fixed_density, sigma=sigma_density)
+    moving_density_smooth = filters.gaussian(moving_density, sigma=sigma_density)
+
+    res = basinhopping(registration_objective,
+                       x0=np.array([0, 0, 0]),
+                       niter=niter,
+                       T=1.0,
+                       stepsize=0.5,
+                       minimizer_kwargs={
+                           'method': 'L-BFGS-B',
+                           'args': (fixed_density, moving_density),
+                           'bounds': [(0, 2*np.pi) for _ in range(3)],
+                           'tol': 0.01,
+                           'options': {'disp': False}
+                       },
+                       disp=True)
+    thetas = res.x
+    t2 = time.time()
+    print('  converged theta (deg): {}'.format(thetas / np.pi * 180))
+    print('  Final correlation coefficient: {}'.format(-res.fun))
+    print('  Took {0:.2f} seconds'.format(t2 - t1))
+
+    # registered_density = transform_density(thetas, moving_density)
+    # registered_density_smooth = transform_density(thetas, moving_density_smooth)
+
+    # plot_densities(fixed_density_smooth,
+    #                moving_density_smooth,
+    #                registered_density_smooth,
+    #                mip=False,
+    #                z=1,
+    #                clim=[0, 15])
+
+    print('transforming the fixed point cloud')
+    t1 = time.time()
+
+    def transform_pts(theta, pts_um):
+        r = rotation_matrix(theta)
+        fixed_coords_um_zeroed = pts_um - fixed_centroid_um
+        rotated_coords_um_zeroed = rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
+        transformed_coords_um = rotated_coords_um_zeroed + moving_centroid_um
+        return transformed_coords_um
+
+    transformed_pts_um = transform_pts(thetas, fixed_pts_um)
+    t2 = time.time()
+    print('  Took {0:.2f} seconds'.format(t2-t1))
+
+    print('matching points')
+    t1 = time.time()
+    fixed_idx, moving_idx = pcloud.match_pts(transformed_pts_um,
+                                             moving_pts_um,
+                                             fixed_features,
+                                             moving_features,
+                                             max_feat_dist,
+                                             prominence_thresh,
+                                             max_distance,
+                                             nb_workers)
+    print('  found {} matches for {} cells'.format(len(fixed_idx), len(fixed_pts)))
+
+    print('saving matching indices')
+    np.save(fixed_idx_path, fixed_idx)
+    np.save(moving_idx_path, moving_idx)
+
+    # print('Loading cached matches')
+    # fixed_idx = np.load(fixed_idx_path)
+    # moving_idx = np.load(moving_idx_path)
 
     print('indexing...')
     fixed_matches = fixed_pts[fixed_idx]
@@ -680,7 +680,7 @@ def main():
     conversion.imsave(fixed_matches_img_path, fixed_matches_img, compress=1)
     conversion.imsave(moving_matches_img_path, moving_matches_img, compress=1)
 
-    pcloud.plot_pts(fixed_pts, moving_pts, candid1=fixed_matches, candid2=moving_matches)
+    # pcloud.plot_pts(fixed_pts, moving_pts, candid1=fixed_matches, candid2=moving_matches)
 
     # print('estimating affine transformation with RANSAC')
     # t1 = time.time()

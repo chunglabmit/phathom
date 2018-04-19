@@ -5,6 +5,7 @@ This file has routines needed by tests. They needed to be in a proper module.
 import numpy as np
 import phathom.utils
 
+
 def check_range(args):
     start, end, cprimes = args
     primes = np.ones(end - start, bool)

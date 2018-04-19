@@ -15,6 +15,7 @@ from . import utils
 import skimage.external.tifffile as tifffile
 from skimage.transform import downscale_local_mean
 import zarr
+from numcodecs import Blosc
 import numpy as np
 import multiprocessing
 import h5py
@@ -82,6 +83,7 @@ def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False):
     :param chunks: tuple of ints specifying the chunk shape
     :return: reference to persistent (on-disk) zarr array
     """
+    compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)
     tif_paths, _ = utils.tifs_in_dir(tif_dir)
     img = imread(tif_paths[0])
     shape = (len(tif_paths), *img.shape)
@@ -91,10 +93,10 @@ def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False):
         data = np.zeros(shape, dtype=dtype)
         for z, tif_path in enumerate(tif_paths):
             data[z] = imread(tif_path)
-        zarr.save_array(zarr_path, data, chunks=chunks)
+        zarr.save_array(zarr_path, data, chunks=chunks, compression=compressor)
         return data
     else:
-        z_arr = zarr.open(zarr_path, mode='w', shape=shape, chunks=chunks, dtype=dtype)
+        z_arr = zarr.open(zarr_path, mode='w', shape=shape, chunks=chunks, dtype=dtype, compression=compressor)
         nb_chunks = utils.chunk_dims(shape, chunks)
         start_list = utils.chunk_coordinates(shape, chunks)
         xy_chunks = nb_chunks[1] * nb_chunks[2]

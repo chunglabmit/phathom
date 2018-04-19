@@ -39,7 +39,7 @@ def tifs_in_dir(path):
     tif_paths = []
     tif_filenames = []
     for f in files:
-        if f.endswith('.tif'):
+        if f.endswith('.tif') or f.endswith('.tiff'):
             tif_paths.append(os.path.join(abspath, f))
             tif_filenames.append(f)
     return tif_paths, tif_filenames
