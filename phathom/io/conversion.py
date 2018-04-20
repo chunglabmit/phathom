@@ -11,7 +11,7 @@ ims_to_zarr - save a terastitcher Imaris file into a chunked zarr array
 downsample_zarr - downsample a chunked zarr array in parallel
 rechunk_zarr - copy a zarr array with new parameters
 """
-from . import utils
+from .. import utils
 import skimage.external.tifffile as tifffile
 from skimage.transform import downscale_local_mean
 import zarr

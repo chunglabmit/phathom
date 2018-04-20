@@ -1,7 +1,7 @@
-from . import partition
-from . import graphcuts
-from . import utils
-from . import conversion as imageio
+from phathom.segmentation import partition
+from phathom.segmentation import graphcuts
+from phathom import utils
+from phathom.io import conversion as imageio
 import argparse
 import numpy as np
 import scipy.ndimage as ndi

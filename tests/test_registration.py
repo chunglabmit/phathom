@@ -2,7 +2,7 @@ import numpy as np
 import unittest
 import zarr
 
-from phathom import registration
+from phathom.registration import registration
 
 
 class TestRegistration(unittest.TestCase):

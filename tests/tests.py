@@ -1,5 +1,5 @@
 import phathom
-import phathom.conversion
+import phathom.io.conversion
 import phathom.utils
 from phathom.test_helpers import *
 import numpy as np
@@ -17,7 +17,7 @@ class TestConversion(unittest.TestCase):
         Load example.tif using imread
         """
         filename = os.path.join(os.path.split(__file__)[0], 'example.tif')
-        data = phathom.conversion.imread(filename)
+        data = phathom.io.conversion.imread(filename)
         self.assertEqual(data.shape, (64, 128, 128), msg='loaded array has the wrong shape')
         self.assertEqual(data.dtype, 'uint16', msg='loaded array has the wrong data type')
 
@@ -27,7 +27,7 @@ class TestConversion(unittest.TestCase):
         """
         arr = np.random.random((32, 32, 32))
         filename = os.path.join(tempfile.gettempdir(), "imsave_test.tif")
-        phathom.conversion.imsave(filename, arr)
+        phathom.io.conversion.imsave(filename, arr)
         tmp = phathom.conversion.imread(filename)
         self.assertTrue(np.all(arr == tmp), msg='saved and loaded array values are not equal')
         self.assertEqual(arr.dtype, tmp.dtype, msg='saved and loaded array do not have same data type')
