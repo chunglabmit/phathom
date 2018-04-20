@@ -375,7 +375,6 @@ def register_chunk(moving_img, fixed_img, output_img, transformation, start, bat
 
 def register(moving_img, fixed_img, output_img, transformation, nb_workers, batch_size=None):
     start_coords = chunk_coordinates(fixed_img.shape, fixed_img.chunks)
-
     args_list = []
     for i, start_coord in enumerate(start_coords):
         start = np.array(start_coord)
