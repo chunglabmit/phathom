@@ -6,9 +6,14 @@
 Phathom is a Python package for analyzing terabyte-scale biological images.
 It relies on distributed computing to scale up image processing tasks that
 are commonly encountered when using [Selective Plane Illumination Microscopy (SPIM)][1].
+These image processing task include:
+  - Non-rigid registration for multi-round imaging
+  - Individual nuclei segmentation
+  - Cell phenotype classification
+  - Brain atlas alignment
 
 ## Getting Started
-Clone this repository and run `python setup.py install`. 
+Clone this repository and run `python setup.py install`.
 Documentation is hosted on [readthedocs](http://phathom.readthedocs.io/en/latest/).
 
 ## Background

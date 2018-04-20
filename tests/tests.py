@@ -1,5 +1,5 @@
 import phathom
-import phathom.io.conversion
+import phathom.io
 import phathom.utils
 from phathom.test_helpers import *
 import numpy as np
@@ -9,38 +9,25 @@ import tempfile
 
 
 class TestConversion(unittest.TestCase):
-    """
-    Unit tests for conversion module
-    """
+
     def test_imread(self):
-        """
-        Load example.tif using imread
-        """
         filename = os.path.join(os.path.split(__file__)[0], 'example.tif')
-        data = phathom.io.conversion.imread(filename)
+        data = phathom.io.tiff.imread(filename)
         self.assertEqual(data.shape, (64, 128, 128), msg='loaded array has the wrong shape')
         self.assertEqual(data.dtype, 'uint16', msg='loaded array has the wrong data type')
 
     def test_imsave(self):
-        """
-        Save and read a random tif and check for consistency
-        """
         arr = np.random.random((32, 32, 32))
         filename = os.path.join(tempfile.gettempdir(), "imsave_test.tif")
-        phathom.io.conversion.imsave(filename, arr)
-        tmp = phathom.io.conversion.imread(filename)
+        phathom.io.tiff.imsave(filename, arr)
+        tmp = phathom.io.tiff.imread(filename)
         self.assertTrue(np.all(arr == tmp), msg='saved and loaded array values are not equal')
         self.assertEqual(arr.dtype, tmp.dtype, msg='saved and loaded array do not have same data type')
 
 
 class TestUtils(unittest.TestCase):
-    """
-    Unit tests for utils module
-    """
+
     def test_make_dir(self):
-        """
-        Create a directory using make_dir
-        """
         test_dir = 'tests/make_dir_test/'
         if os.path.isdir(test_dir):
             os.rmdir(test_dir)
@@ -50,9 +37,6 @@ class TestUtils(unittest.TestCase):
             os.rmdir(test_dir)
 
     def test_files_in_dir(self):
-        """
-        Scan for all files within tests/file_tests/
-        """
         file_test_dir = os.path.join(os.path.dirname(__file__),
                                      'file_tests')
         expected_files = ['file1.txt', 'file2.tif', 'file3.tif']
@@ -60,9 +44,6 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(found_files, expected_files, msg='found incorrect files')
 
     def test_tifs_in_dir(self):
-        """
-        Scan for all tifs within tests/file_tests/
-        """
         file_test_dir = os.path.join(os.path.dirname(__file__),
                                      'file_tests')
         expected_files = ['file2.tif', 'file3.tif']
@@ -75,9 +56,6 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(found_paths, expected_paths, msg='found incorrect tif paths')
 
     def test_pickle_save_load(self):
-        """
-        Save and load a pickled dictionary
-        """
         true_dict = {'chunks': (8, 16, 32), 'shape': (100, 1000, 1000)}
         tmp_file = 'tests/tmp.pkl'
         phathom.utils.pickle_save(tmp_file, true_dict)
@@ -90,6 +68,7 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(result[0], 5000000029)
 
 class TestSegmentation(unittest.TestCase):
+    
     pass
 
 if __name__=="__main__":
