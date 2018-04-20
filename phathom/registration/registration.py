@@ -111,14 +111,9 @@ def chunk_generator(z_arr, overlap):
     :param overlap: int indicating number of voxels to overlap adjacent chunks
     :return: the next chunk in the zarr array
     """
-    # Only one instance of this generator is dishing up chunks -> slow
-    # Open the zarr array in the worker processes
     _, starts, stops = chunk_bboxes(z_arr.shape, z_arr.chunks, overlap)
     for start, stop in zip(starts, stops):
         yield start, stop
-        # z0, y0, x0 = start
-        # z1, y1, x1 = stop
-        # yield z_arr[z0:z1, y0:y1, x0:x1]
 
 
 def detect_blobs(bbox, z_arr, sigma, min_distance, min_intensity):
