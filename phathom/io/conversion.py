@@ -11,7 +11,8 @@ ims_to_zarr - save a terastitcher Imaris file into a chunked zarr array
 downsample_zarr - downsample a chunked zarr array in parallel
 rechunk_zarr - copy a zarr array with new parameters
 """
-from .. import utils
+from phathom import utils
+from phathom import io
 import skimage.external.tifffile as tifffile
 from skimage.transform import downscale_local_mean
 import zarr
@@ -25,45 +26,8 @@ from sys import stdout
 import tqdm
 
 
-def imread(path):
-    """ Reads TIF file into a numpy array in memory.
-
-    :param path: path to tif image to open
-    :return: numpy ndarray with image data
-    """
-    return tifffile.imread(files=path)
-
-
-def imsave(path, data, compress=0):
-    """ Saves numpy array as a TIF image.
-
-    :param path: path to tif image to create / overwrite
-    :param data: numpy ndarray with image data
-    :param compress: int (0-9) indicating the degree of lossless compression
-    """
-    tifffile.imsave(file=path, data=data, compress=compress)
-
-
-def write_chunk(data, z_arr, start):
-    stop = tuple(s+c for s,c in zip(start, data.shape))
-    assert start[0] < stop[0]
-    assert start[1] < stop[1]
-    assert start[2] < stop[2]
-    z_arr[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]] = data
-
-
-def read_tifs(tif_paths):
-    # TODO: fixed hard-coded nb_workers
-    img = imread(tif_paths[0])
-    shape = (len(tif_paths), *img.shape)
-    data = np.zeros(shape, dtype=img.dtype)
-    with multiprocessing.Pool(16) as pool:
-        data = np.array(pool.map(imread, tif_paths))
-    return data
-
-
 def tifs_to_zarr_chunks(z_arr, tif_paths, start_list):
-    data = read_tifs(tif_paths)  # read tiffs in parallel
+    data = io.tiff.read_tifs(tif_paths)  # read tiffs in parallel
 
     args = []
     for start in start_list:
@@ -72,7 +36,7 @@ def tifs_to_zarr_chunks(z_arr, tif_paths, start_list):
         args.append((chunk, z_arr, start))
 
     with multiprocessing.Pool(16) as pool:
-        pool.starmap(write_chunk, args) # write tiffs in parallel
+        pool.starmap(io.zarr.write_chunk, args) # write tiffs in parallel
 
 
 def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False):
@@ -85,14 +49,14 @@ def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False):
     """
     compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)
     tif_paths, _ = utils.tifs_in_dir(tif_dir)
-    img = imread(tif_paths[0])
+    img = io.tiff.imread(tif_paths[0])
     shape = (len(tif_paths), *img.shape)
     dtype = img.dtype
     # TODO: Swtich to producer-consumer model for tif reading -> zarr writing
     if in_memory:
         data = np.zeros(shape, dtype=dtype)
         for z, tif_path in enumerate(tif_paths):
-            data[z] = imread(tif_path)
+            data[z] = io.tiff.imread(tif_path)
         zarr.save_array(zarr_path, data, chunks=chunks, compression=compressor)
         return data
     else:
@@ -119,7 +83,7 @@ def tif_to_zarr(tif_path, zarr_path, chunks, in_memory=False, **kwargs):
     :return: reference to persistent (on-disk) zarr array
     """
     if in_memory:
-        data = imread(tif_path)
+        data = io.tiff.imread(tif_path)
         zarr.save_array(zarr_path, data, chunks=chunks, **kwargs)
     else:
         with tifffile.TiffFile(tif_path) as tif:
@@ -149,7 +113,7 @@ def slice_to_tiff(arr, idx, output_dir, compress):
     img = arr[idx]
     filename = '{0:04d}.tif'.format(idx)
     path = os.path.join(output_dir, filename)
-    imsave(path, img, compress=compress)
+    io.tiff.imsave(path, img, compress=compress)
 
 
 def zarr_to_tifs(zarr_path, output_dir, nb_workers=1, compress=0, in_memory=False):
@@ -187,7 +151,7 @@ def ims_slice_to_tiff(z, ims_file, output_path):
     with h5py.File(ims_file, "r") as fd:
         # This group structure is default from Terastitcher
         img = fd['DataSet/ResolutionLevel 0/TimePoint 0/Channel 0/Data'][z]
-    imsave(output_path, img)
+    io.tiff.imsave(output_path, img)
 
 
 def ims_to_tiffs(ims_file, output_dir, nb_workers):
@@ -263,15 +227,17 @@ def ims_to_zarr(ims_path, zarr_path, chunks, nb_workers):
         # Save chunks in parallel
         pool.starmap(ims_chunk_to_zarr, args)
 
+# TODO: move downsample code to utils or preprocessing
+
 
 def downsample_chunk(args):
     """ Downsample a zarr array chunk and write it to another zarr array as a smaller chunk
-    
+
     :param z_arr_in: input zarr array
     :param z_arr_out: ouput zarr array
     :param chunk_idx: array-like of chunk indices
     :param factors: array-like of float downsampling factors
-    :return: 
+    :return:
     """""
     z_arr_in, z_arr_out, chunk_idx, factors = args
 
@@ -318,7 +284,7 @@ def downsample_zarr(z_arr_in, factors, output_path, nb_workers=1, **kwargs):
     with multiprocessing.Pool(processes=nb_workers) as pool:
         list(tqdm.tqdm(pool.imap(downsample_chunk, args), total=len(args)))
 
-
+# TODO: this can probably also use io.zarr.write_chunk
 def fetch_and_write_chunk(source, dest, dest_chunk_idx):
     start = np.array(dest_chunk_idx) * np.array(dest.chunks)
     stop = np.array([(i+1)*c if (i+1)*c <= s else s for i, c, s in zip(dest_chunk_idx, dest.chunks, dest.shape)])
