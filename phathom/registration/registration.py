@@ -135,7 +135,10 @@ def detect_blobs(bbox, z_arr, sigma, min_distance, min_intensity):
     img = z_arr[z0:z1, y0:y1, x0:x1]
 
     smoothed = filters.gaussian(img, sigma=sigma, preserve_range=True)
-    thresh = threshold_otsu(smoothed)
+    if np.any(smoothed > 0):
+        thresh = threshold_otsu(smoothed)
+    else:
+        thresh = 1.0  # Otsu fails if all voxels are black
     peaks = feature.peak_local_max(smoothed,
                                    min_distance=min_distance,
                                    threshold_abs=max(min_intensity, thresh))
@@ -163,7 +166,7 @@ def detect_blobs_parallel(z_arr, sigma, min_distance, min_intensity, overlap, nb
     chunks = list(chunk_generator(z_arr, overlap))
 
     pts_list = []
-    with multiprocessing.Pool(nb_workers) as pool: 
+    with multiprocessing.Pool(nb_workers) as pool:
         r = list(tqdm.tqdm(pool.imap(detect_blobs_in_chunk, chunks),
                            total=len(chunks)))
     for i, pts_local in enumerate(r):
@@ -201,7 +204,7 @@ def pts_to_img(pts, shape, path):
 
 def mark_pts(arr, pts):
     """ Mark a list of points in an array using 3-voxel cubes
-    
+
     :param arr: Input array to modify
     :param pts: Points to mark
     :return: Original array with the blob marked
@@ -665,15 +668,15 @@ def main():
 
     # print('estimating non-rigid transformation with RBFs')
     # nb_samples = 1000
-    # 
+    #
     # sample_idx = np.random.choice(len(fixed_matches), nb_samples, replace=False)
     # fixed_sample = fixed_matches[sample_idx]
     # moving_sample = moving_matches[sample_idx]
-    # 
+    #
     # correspondence_sample = np.hstack((fixed_sample, moving_sample))
-    # 
+    #
     # from scipy.interpolate import Rbf
-    # 
+    #
     # rbf_z = Rbf(correspondence_sample[:, 0],  # fixed z
     #             correspondence_sample[:, 1],  # fixed y
     #             correspondence_sample[:, 2],  # fixed x
@@ -681,7 +684,7 @@ def main():
     #             function='thin-plate',
     #             epsilon=None,
     #             smooth=0)
-    # 
+    #
     # rbf_y = Rbf(correspondence_sample[:, 0],  # fixed z
     #             correspondence_sample[:, 1],  # fixed y
     #             correspondence_sample[:, 2],  # fixed x
@@ -689,7 +692,7 @@ def main():
     #             function='thin-plate',
     #             epsilon=None,
     #             smooth=0)
-    # 
+    #
     # rbf_x = Rbf(correspondence_sample[:, 0],  # fixed z
     #             correspondence_sample[:, 1],  # fixed y
     #             correspondence_sample[:, 2],  # fixed x
@@ -697,13 +700,13 @@ def main():
     #             function='thin-plate',
     #             epsilon=None,
     #             smooth=0)
-    # 
+    #
     # zm = rbf_z(correspondence_sample[:, 0], correspondence_sample[:, 1], correspondence_sample[:, 2])
     # ym = rbf_y(correspondence_sample[:, 0], correspondence_sample[:, 1], correspondence_sample[:, 2])
     # xm = rbf_x(correspondence_sample[:, 0], correspondence_sample[:, 1], correspondence_sample[:, 2])
     # ave_keypt_resid = np.linalg.norm(np.vstack([zm, ym, xm]).T - moving_sample, axis=-1).mean()
     # print('RBF average residual at keypoints: {0:.1f} voxels'.format(ave_keypt_resid))
-    # 
+    #
     # zm = rbf_z(fixed_matches[:,0], fixed_matches[:,1], fixed_matches[:,2])
     # ym = rbf_y(fixed_matches[:,0], fixed_matches[:,1], fixed_matches[:,2])
     # xm = rbf_x(fixed_matches[:,0], fixed_matches[:,1], fixed_matches[:,2])

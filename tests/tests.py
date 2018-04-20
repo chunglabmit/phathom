@@ -28,7 +28,7 @@ class TestConversion(unittest.TestCase):
         arr = np.random.random((32, 32, 32))
         filename = os.path.join(tempfile.gettempdir(), "imsave_test.tif")
         phathom.io.conversion.imsave(filename, arr)
-        tmp = phathom.conversion.imread(filename)
+        tmp = phathom.io.conversion.imread(filename)
         self.assertTrue(np.all(arr == tmp), msg='saved and loaded array values are not equal')
         self.assertEqual(arr.dtype, tmp.dtype, msg='saved and loaded array do not have same data type')
 

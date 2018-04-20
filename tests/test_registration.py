@@ -11,7 +11,7 @@ class TestRegistration(unittest.TestCase):
                        chunks=(25, 25, 25),
                        dtype=np.uint16)
         blobs = registration.detect_blobs_parallel(
-            z, 1.0, 5, .5, 5)
+            z, 1.0, 5, .5, 5, 2)
         self.assertEqual(len(blobs), 0)
 
     def test_one_detect_blobs_parallel(self):
@@ -23,7 +23,7 @@ class TestRegistration(unittest.TestCase):
         #
         is_blob = np.sqrt(np.sum(np.mgrid[-12:13, -11:14, -10:15]**2, 0)) < 7
         z[:25, :25, :25] = is_blob * np.uint16(200)
-        blobs = registration.detect_blobs_parallel(z, 1.0, 5, .5, 5)
+        blobs = registration.detect_blobs_parallel(z, 1.0, 5, .5, 5, 2)
         self.assertEqual(len(blobs), 1)
         self.assertAlmostEqual(blobs[0, 0], 12, 1)
         self.assertAlmostEqual(blobs[0, 1], 11, 1)
