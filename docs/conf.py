@@ -24,7 +24,7 @@ copyright = '2018, Kwanghun Chung Lab, Massachusetts Institute of Technology'
 author = 'Justin Swaney and Lee Kamentsky'
 
 # The short X.Y version
-version = ''
+version = '0.1'
 # The full version, including alpha/beta/rc tags
 release = '2018'
 
@@ -43,7 +43,10 @@ extensions = [
     'sphinx.ext.imgmath',
     'sphinx.ext.autosummary',
     'sphinx.ext.extlinks',
+    'sphinx.ext.napoleon',
 ]
+
+napoleon_google_docstring = False
 
 
 # Add any paths that contain templates here, relative to this directory.

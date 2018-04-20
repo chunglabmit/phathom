@@ -134,6 +134,7 @@ def score_centroids(c_detected, c_gt, max_distance):
         recall - the recall of matching # truly detected / # in ground truth
         f_score - the f-score
     """
+    # TODO: Fix this docstring for Sphinx
     d_idxs, gt_idxs = match_centroids(c_detected, c_gt, max_distance)
     n_tp = np.sum(d_idxs >= 0)
     n_fp = np.sum(d_idxs < 0)

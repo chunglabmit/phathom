@@ -143,19 +143,6 @@ def regionprops(intensity_img, labels_img):
         min_intensity = region.min_intensity
         # Tabulate data
         centroids[i] = region.centroid
-        if verbose:
-            print(30*'-')
-            print(f'Nucleus {i:d} at ({int(zc):d}, {int(yc):d}, {int(xc):d})')
-            print(f'    Shape-based measurements')
-            print(f'    Volume [vox]: {nb_vox:d}')
-            print(f'    Volume [um3]: {volume:.1f}')
-            print(f'    Equivalent Diameter [um]: {eq_diam:.2f}')
-            print(f'    Principle moments of inertia: ({princple_interia[0]:.3f}, {princple_interia[1]:.3f}, {princple_interia[2]:.3f})')
-            print(f'    Ratio of principle moments of intertia: {inertia_ratio:.3f}')
-            print(f'    Intensity-based measurements')
-            print(f'    Max intensity: {max_intensity:.3f}')
-            print(f'    Mean intensity: {mean_intensity:.3f}')
-            print(f'    Min intensity: {min_intensity:.3f}')
     return None
 
 
