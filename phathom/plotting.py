@@ -2,6 +2,14 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
 def plot_pts(pts1, pts2=None, alpha=1, candid1=None, candid2=None):
+    """ Plot point clouds with correspondences.
+
+    :param pts1: point cloud 1
+    :param pts2: point cloud 2
+    :param alpha: point cloud transparency
+    :param candid1: matches in point cloud 1
+    :param candid2: matches in point cloud 2
+    """
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
@@ -34,6 +42,15 @@ def plot_pts(pts1, pts2=None, alpha=1, candid1=None, candid2=None):
 
 
 def plot_densities(fixed, moving=None, registered=None, z=0, mip=False, clim=None):
+    """ Plot keypoint density maps.
+
+    :param fixed: array of fixed image density
+    :param moving: array of moving image density
+    :param registered: array of registered density
+    :param z: int indicating which z-slice to plot (if mip == False)
+    :param mip: boolean indicating whether or not to project max-intensity on z
+    :param clim: pseudocoloring lower and upper intensity bounds
+    """
     if mip:
         fixed_img = fixed.max(axis=0)
     else:

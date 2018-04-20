@@ -175,6 +175,11 @@ def label_pts(arr, pts):
 
 
 def estimate_rigid(fixed_inliers, moving_inliers):
+    """ Estimate a rigid transformation from fixed to moving points using SVD.
+
+    :param fixed_inliers: Array (N, 3) of fixed coordinates
+    :param moving_inliers: Array (N, 3) of corresponding moving coordinates
+    """
     # Find centroids
     fixed_centroid = np.mean(fixed_inliers, axis=0)
     moving_centroid = np.mean(moving_inliers, axis=0)
@@ -190,30 +195,64 @@ def estimate_rigid(fixed_inliers, moving_inliers):
 
 
 def rigid_transformation(t, r, pts):
+    """ Apply rotation and translation (rigid transformtion) to a set of points.
+
+    :param t: 1D array representing the translation vector
+    :param r: 2D array representing the rotation matrix
+    """
     return r.dot(pts.T).T + t
 
 
 def indices_to_um(pts, voxel_dimensions):
+    """ Convert indicies to micron units wrt the top-upper-left.
+
+    :param pts: 2D array (N, D) of ints to convert
+    :param voxel_dimensions: 1D array (D,) of floats representing voxel shape
+    """
     return np.array([d*pts[:, i] for d, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
 
 
 def um_to_indices(pts_um, voxel_dimensions):
+    """ Convert micron units wtf top-upper-left to indices
+
+    :param pts_um: 2D array (N, D) of floats in micron to convert
+    :param voxel_dimensions: 1D array (D,) of floats representing voxel shape
+    """
     return np.array([pts_um[:, i]/d for d, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
 
 
 def rigid_residuals(t, r, fixed_pts, moving_pts):
+    """ Compute the residuals for all points after the rigid transformation
+
+    :param t: 1D array (D,) of the translation
+    :param r: 2D array (D, D) of the rotation matrix
+    :param fixed_pts: 2D array (N, D) of points to transform
+    :param moving_pts: 2D array (N, D) of target points
+    """
     return moving_pts - rigid_transformation(t, r, fixed_pts)
 
 
 def residuals_to_distances(residuals):
+    """ Compute the Euclidean distances given residuals in each dimension.
+
+    :param residuals: 2D array (N, D) of residuals
+    """
     return np.linalg.norm(residuals, axis=-1)
 
 
 def average_distance(distances):
+    """ Compute the average Euclidean distance over a sequence of distances
+
+    :param average_distance: 1D array (N,) of distances
+    """
     return np.mean(distances)
 
 
 def shape_to_coordinates(shape):
+    """ Build an array containing all array indices for a given shape.
+
+    :param shape: array-like containing 3 ints representing the array shape
+    """
     indices = np.indices(shape)
     z_idx = indices[0].flatten()
     y_idx = indices[1].flatten()
@@ -222,6 +261,12 @@ def shape_to_coordinates(shape):
 
 
 def interpolate(image, coordinates, order=3):
+    """ Interpolate an image at a list of coodinates.
+
+    :param image: array to interpolate
+    :param coordinates: 2D array (N, D) of N coordinates to be interpolated
+    :param order: polynomial order of the interpolation (default: 3, cubic)
+    """
     output = map_coordinates(image,
                              coordinates.T,
                              output=None,
@@ -233,6 +278,10 @@ def interpolate(image, coordinates, order=3):
 
 
 def rotation_matrix(thetas):
+    """ Create a 3D rotation matrix given rotations about each axis.
+
+    :param thetas: array-like with 3 rotation angles in radians
+    """
     rz = np.eye(3)
     rz[1, 1] = np.cos(thetas[0])
     rz[2, 2] = np.cos(thetas[0])
@@ -252,6 +301,11 @@ def rotation_matrix(thetas):
 
 
 def ncc(fixed, registered):
+    """ Calculate the normalized cross-correlation between two images.
+
+    :param fixed: array of first image to be compared
+    :param registered: array of second image to be compared
+    """
     idx = np.where(registered>0)
     a = fixed[idx]
     b = registered[idx]
@@ -259,6 +313,11 @@ def ncc(fixed, registered):
 
 
 def mean_square_error(fixed, transformed):
+    """ Calculate the nmean squared error between two images.
+
+    :param fixed: array of first image to be compared
+    :param registered: array of second image to be compared
+    """
     idx = np.where(transformed > 0)
     a = fixed[idx]
     b = transformed[idx]
@@ -266,6 +325,15 @@ def mean_square_error(fixed, transformed):
 
 
 def register_chunk(moving_img, fixed_img, output_img, transformation, start, batch_size=None):
+    """ Apply transformation and interpolate for a single chunk in the output.
+
+    :param moving_img: zarr array with read access to interpolate
+    :param fixed_img: zarr array with read access (used for shape info)
+    :param output_img: zarr array with write access for output
+    :param transformation: callable that takes a single "pts" argument
+    :param start: starting index of the chunk to write
+    :param batch_size: number of points to apply the transformation on at once
+    """
     # Get dimensions
     chunks = np.array(output_img.chunks)
     img_shape = np.array(fixed_img.shape)
@@ -316,6 +384,15 @@ def register_chunk(moving_img, fixed_img, output_img, transformation, start, bat
 
 
 def register(moving_img, fixed_img, output_img, transformation, nb_workers, batch_size=None):
+    """ Transform a moving zarr array for registration.
+
+    :param moving_img: zarr array with read access to be interpolated
+    :param fixed_img: zarr array with read access for the target
+    :param output_img: zarr array with write acces for the output
+    :param transformation: callable that takes one "pts" argument
+    :param nb_workers: number of processes to work on separate chunks
+    :param batch_size: number of points to apply the transformation on at once
+    """
     start_coords = chunk_coordinates(fixed_img.shape, fixed_img.chunks)
     args_list = []
     for i, start_coord in enumerate(start_coords):
@@ -394,6 +471,12 @@ def rigid_registration():
 
 
 def pcloud_hist(pts, dimensions, bin_size):
+    """ Compute the histogram of a 3D point cloud.
+
+    :param pts: 2D array (N, D) of points
+    :param dimensions: overall dimensions of the histogram (image bounds)
+    :param bin_size: float representing the dimension of each bin
+    """
     # Find CoM (TUP offsets in um)
     centroid = pts.mean(axis=0)
 
