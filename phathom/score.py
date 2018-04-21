@@ -86,6 +86,7 @@ def f_score(n_true_positive, n_false_positive, n_false_negative):
     r = recall(n_true_positive, n_false_negative)
     return 2 * p * r / (p + r)
 
+
 def match_centroids(c1, c2, max_distance, inf=100000.):
     """Find the best matching of centroids in c1 to centroids in c2
 
@@ -198,8 +199,8 @@ def score_centroids(c_detected, c_gt, max_distance):
     n_tp = np.sum(d_idxs >= 0)
     n_fp = np.sum(d_idxs < 0)
     n_fn = np.sum(gt_idxs < 0)
-    p = precision(n_tp, n_fp, n_fn)
-    r = recall(n_tp, n_fp, n_fn)
+    p = precision(n_tp, n_fp)
+    r = recall(n_tp, n_fn)
     f = f_score(n_tp, n_fp, n_fn)
 
     class CentroidsScore:

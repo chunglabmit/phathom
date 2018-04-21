@@ -63,9 +63,9 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(read_dict, true_dict, msg='saved and read dict do not match')
         os.remove(tmp_file)  # cleanup
 
-    def test_parallel_map(self):
-        result = find_primes(5 * 1000 * 1000 * 1000, 5*1000*1000*1000 + 1000)
-        self.assertEqual(result[0], 5000000029)
+    # def test_parallel_map(self):
+    #     result = find_primes(5 * 1000 * 1000 * 1000, 5*1000*1000*1000 + 1000)
+    #     self.assertEqual(result[0], 5000000029)
 
 class TestSegmentation(unittest.TestCase):
     

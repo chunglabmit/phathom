@@ -7,26 +7,24 @@ class TestPrecision(unittest.TestCase):
     def test(self):
         tp = [ 100, 0]
         fp = [ 25, 100]
-        fn = [ 0, 1]
         expected = [ 100. / 125., 0]
-        for tpp, fpp, fnn, e in zip(tp, fp, fn, expected):
-            self.assertAlmostEqual(e, score.precision(tpp, fpp, fnn))
+        for tpp, fpp, e in zip(tp, fp, expected):
+            self.assertAlmostEqual(e, score.precision(tpp, fpp))
 
     def test_nan(self):
-        self.assertTrue(np.isnan(score.precision(0, 0, 100)))
+        self.assertTrue(np.isnan(score.precision(0, 0)))
 
 
 class TestRecall(unittest.TestCase):
     def test(self):
         tp = [ 100, 0]
-        fp = [ 1, 1]
         fn = [ 50, 100]
         expected = [ 100. / 150., 0]
-        for tpp, fpp, fnn, e in zip(tp, fp, fn, expected):
-            self.assertAlmostEqual(e, score.recall(tpp, fpp, fnn))
+        for tpp, fnn, e in zip(tp, fn, expected):
+            self.assertAlmostEqual(e, score.recall(tpp, fnn))
 
     def test_nan(self):
-        self.assertTrue(np.isnan(score.recall(0, 100, 0)))
+        self.assertTrue(np.isnan(score.recall(0, 0)))
 
 
 class TestMatchCentroids(unittest.TestCase):
