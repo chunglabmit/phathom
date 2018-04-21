@@ -66,10 +66,20 @@ def geometric_hash(center, vectors):
 
 
 def geometric_features(pts, nb_workers):
-    """ Extract the geometric hash for each point in a point cloud.
+    """Extract the geometric hash for each point in a point cloud
 
-    :param pts: 2D array (N, 3) of points
-    :param nb_workers: number of processes to calculate features in parallel
+    Parameters
+    ----------
+    pts : array
+        2D array (N, 3) of points
+    nb_workers : int
+        number of processes to calculate features in parallel
+
+    Returns
+    -------
+    features : array
+        (N, 6) array of geometric features
+
     """
     # Performance params available: leaf_size and n_jobs
     nbrs = NearestNeighbors(n_neighbors=4, algorithm='kd_tree', n_jobs=-1).fit(pts)
@@ -96,10 +106,15 @@ def find_similar(feat_stationary, feat_moving):
 
 
 def neighborhood_init(external_spatial_kdtree, external_feat_moving):
-    """ Initialize workers that perform neighborhood matching.
+    """Initialize workers that perform neighborhood matching
 
-    :param external_spatial_kdtree: a NearestNeighbor kdtree fit on moving pts
-    :param external_feat_moving: 2D array (N, 6) of the moving point features
+    Parameters
+    ----------
+    external_spatial_kdtree : NearestNeighbor
+        a NearestNeighbor kdtree fit on moving pts
+    external_feat_moving : array
+        (N, 6) array of the moving point features
+
     """
     global spatial_kdtree
     global feat_moving
@@ -108,9 +123,18 @@ def neighborhood_init(external_spatial_kdtree, external_feat_moving):
 
 
 def neighborhood_matching(args):
-    """ Search for a matching moving point within a radius neighborhood.
+    """Search for a matching moving point within a radius neighborhood
 
-    :param args: A tuple containing a fixed point and its features
+    Parameters
+    ----------
+    args : tuple
+        A tuple containing a fixed point and its features
+
+    Returns
+    -------
+    result : None or array
+        position of the found moving point match. None if no match is found.
+
     """
     pt_stationary, pt_stationary_feat, prominence_thresh, max_feat_dist = args
 
@@ -129,16 +153,34 @@ def neighborhood_matching(args):
 
 
 def match_pts(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat_dist, prominence_thresh, max_distance, nb_workers):
-    """ Find matching moving points with a radius neighborhood of fixed points.
+    """Find matching moving points with a radius neighborhood of fixed points
 
-    :param pts_stationary: array (N, 3) of fixed points
-    :param pts_moving: array (M, 3) of moving points
-    :param feat_stationary: array (N, 6) of fixed point features
-    :param feat_moving: array (M, 6) of moving point features
-    :param max_feat_dist: float of the maximum allowed feature-space distance
-    :param prominence_thresh: float of the maximum allowed prominence factor
-    :param max_distance: float of the neighborhood search radius
-    :param nb_workers: number of processes to search for matches in parallel
+    Parameters
+    ----------
+    pts_stationary : array
+        array (N, 3) of fixed points
+    pts_moving : array
+        array (M, 3) of moving points
+    feat_stationary : array
+        array (N, 6) of fixed point features
+    feat_moving : array
+        array (M, 6) of moving point features
+    max_feat_dist : float
+        float of the maximum allowed feature-space distance
+    prominence_thresh : float
+        float of the maximum allowed prominence factor
+    max_distance : float
+        float of the neighborhood search radius
+    nb_workers : int
+        number of processes to search for matches in parallel
+
+    Returns
+    -------
+    stationary_matches : array
+        indices of found matches in the stationary image
+    moving_matches : array
+        indices of found matches in the moving image
+
     """
     print('building kd-tree')
     spatial_nbrs = NearestNeighbors(radius=max_distance, algorithm='kd_tree', n_jobs=-1).fit(pts_moving)
@@ -163,16 +205,34 @@ def match_pts(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat
 
 
 def match_pts_global(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat_dist, prominence_thresh, max_distance, nb_workers):
-    """ Find matching moving points globally (without neighborhood search).
+    """Find matching moving points globally (without neighborhood search)
 
-    :param pts_stationary: array (N, 3) of fixed points
-    :param pts_moving: array (M, 3) of moving points
-    :param feat_stationary: array (N, 6) of fixed point features
-    :param feat_moving: array (M, 6) of moving point features
-    :param max_feat_dist: float of the maximum allowed feature-space distance
-    :param prominence_thresh: float of the maximum allowed prominence factor
-    :param max_distance: float of the neighborhood search radius
-    :param nb_workers: number of processes to search for matches in parallel
+    Parameters
+    ----------
+    pts_stationary : array
+        array (N, 3) of fixed points
+    pts_moving : array
+        array (M, 3) of moving points
+    feat_stationary : array
+        array (N, 6) of fixed point features
+    feat_moving : array
+        array (M, 6) of moving point features
+    max_feat_dist : float
+        float of the maximum allowed feature-space distance
+    prominence_thresh : float
+        float of the maximum allowed prominence factor
+    max_distance : float
+        float of the neighborhood search radius
+    nb_workers : int
+        number of processes to search for matches in parallel
+
+    Returns
+    -------
+    stationary_matches : array
+        indices of found matches in the stationary image
+    moving_matches : array
+        indices of found matches in the moving image
+
     """
     moving_nbrs = NearestNeighbors(n_neighbors=2, algorithm='kd_tree', n_jobs=-1).fit(feat_moving)
     distances, indices = moving_nbrs.kneighbors(feat_stationary)
@@ -211,13 +271,26 @@ def unflatten(pts_vector):
 
 
 def estimate_affine(batch_stationary, batch_moving, mode='ransac', min_samples=4, residual_threshold=None):
-    """ Estimate an affine transformation from fixed to moving points.
+    """Estimate an affine transformation from fixed to moving points
 
-    :param batch_stationary: array (N, 3) of matched fixed points
-    :param batch_moving: array (N, 3) of matched moving points
-    :param mode: Either 'ransac' or 'lstsq'
-    :param min_samples: int for the number of samples to use for RANSAC
-    :param residual_threshold: float for the inlier-outlier cutoff residual
+    Parameters
+    ----------
+    batch_stationary : array
+        array (N, 3) of matched fixed points
+    batch_moving : array
+        array (N, 3) of matched moving points
+    mode : str
+        Either 'ransac' or 'lstsq'
+    min_samples : int
+        int for the number of samples to use for RANSAC
+    residual_threshold : float
+        float for the inlier-outlier cutoff residual
+
+    Returns
+    -------
+    model : linear_model or array
+        ransac or affine matrix
+
     """
     if batch_stationary.shape[0] != batch_moving.shape[0]:
         raise ValueError('Batches need equal number of points')

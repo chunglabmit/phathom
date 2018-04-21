@@ -7,16 +7,28 @@ from scipy.optimize import linear_sum_assignment
 from scipy.spatial.kdtree import KDTree
 
 
-def precision(n_true_positive, n_false_positive, n_false_negative):
+def precision(n_true_positive, n_false_positive):
     """Compute precision from true/false positive/negative
 
-    "precision is the fraction of relevant instances among the retrieved
-    instances" (https://en.wikipedia.org/wiki/Precision_and_recall)
+    Parameters
+    ----------
+    n_true_positive : int
+        # of true positives in sample
+    n_false_positive : int
+        # of false positives in sample
 
-    :param n_true_positive: # of true positives in sample
-    :param n_false_positive: # of false positives in sample
-    :param n_false_negative: # of false negatives in sample
-    :returns:  true positives / (true positives + false positives)
+    Returns
+    -------
+    precision : float
+        true positives / (true positives + false positives)
+
+    References
+    ----------
+    "precision is the fraction of relevant instances among the retrieved
+    instances [1]_"
+
+    .. [1] https://en.wikipedia.org/wiki/Precision_and_recall
+
     """
     try:
         return float(n_true_positive) / (n_true_positive + n_false_positive)
@@ -24,17 +36,28 @@ def precision(n_true_positive, n_false_positive, n_false_negative):
         return np.nan
 
 
-def recall(n_true_positive, n_false_positive, n_false_negative):
+def recall(n_true_positive, n_false_negative):
     """Compute recall from true/false positive/negative
 
-    "recall  is the fraction of relevant instances that have been retrieved
-    over the total amount of relevant instances"
-    (https://en.wikipedia.org/wiki/Precision_and_recall)
+    Parameters
+    ----------
+    n_true_positive : int
+        # of true positives in sample
+    n_false_negative : int
+        # of false negatives in sample
 
-    :param n_true_positive: # of true positives in sample
-    :param n_false_positive: # of false positives in sample
-    :param n_false_negative: # of false negatives in sample
-    :returns:  true positives / (true positives + false negatives)
+    Returns
+    -------
+    recall : float
+        positives / (true positives + false negatives)
+
+    References
+    ----------
+    "recall  is the fraction of relevant instances that have been retrieved
+    over the total amount of relevant instances [1]_"
+
+    .. [1] https://en.wikipedia.org/wiki/Precision_and_recall
+
     """
     try:
         return float(n_true_positive) / (n_true_positive + n_false_negative)
@@ -45,29 +68,48 @@ def recall(n_true_positive, n_false_positive, n_false_negative):
 def f_score(n_true_positive, n_false_positive, n_false_negative):
     """Compute f-score (f-measure) from true/false positive/negative
 
-    :param n_true_positive: # of true positives in sample
-    :param n_false_positive: # of false positives in sample
-    :param n_false_negative: # of false negatives in sample
-    :returns:  the harmonic mean of precision and recall
+    Parameters
+    ----------
+    n_true_positive : int
+        # of true positives in sample
+    n_false_positive : int
+        # of false positives in sample
+    n_false_negative : int
+        # of false negatives in sample
+
+    Returns
+    -------
+    f-score : float
+        the harmonic mean of precision and recall
     """
-    p = precision(n_true_positive, n_false_positive, n_false_negative)
-    r = recall(n_true_positive, n_false_positive, n_false_negative)
+    p = precision(n_true_positive, n_false_positive)
+    r = recall(n_true_positive, n_false_negative)
     return 2 * p * r / (p + r)
 
 def match_centroids(c1, c2, max_distance, inf=100000.):
     """Find the best matching of centroids in c1 to centroids in c2
 
-    Match centroids in c1 to those in c2, minimizing total distance between
-    pairs with the constraint that no match is further away than max_distance.
+    Match centroids in `c1` to those in `c2`, minimizing total distance between
+    pairs with the constraint that no match is further away than `max_distance`.
 
-    :param c1: an N1xM array of centroid coordinates (M is the dimension
-               of the volume).
-    :param c2: another N2xM array of centroid coordinates
-    :param max_distance: the maximum allowed distance between pairs
-    :param inf: a ridiculously large distance to use in place of true infinity
-    :returns: two arrays - one with the index of the matching centroid in c2
-           for each c1 and one with the index of the matching centroid in c1
-           for each c2. An index of -1 indicates that no match was found.
+    Parameters
+    ----------
+    c1 : array
+        an N1xM array of centroid coordinates (M is the dimension of the volume).
+    c2 : array
+        another N2xM array of centroid coordinates
+    max_distance : float
+        the maximum allowed distance between pairs
+    inf : float
+        a ridiculously large distance to use in place of true infinity
+
+    Returns
+    -------
+    c1_idxs : array
+        the index of the matching centroid in `c2` for each `c1`. Index -1 means no match.
+    c2_idxs : array
+        the index of the matching centroid in `c1` for each `c2`. Index of -1 means no match.
+
     """
     #
     # The matrix consists of rows of c1 and alternatives for c2
@@ -120,19 +162,36 @@ def score_centroids(c_detected, c_gt, max_distance):
     Find the best match of detected to ground-truth and then compute
     precision, recall and f_score from those.
 
-    :param c_detected: an N1xM array of the detected centroids
-    :param c_gt: an N2xM array of the ground-truth centroids
-    :param max_distance: maximum allowed distance of a match
-    :returns: a CentroidsScore with the following attributes:
-        gt_per_detected - an array of the indices of the ground-truth match
-              for each detected centroid. An index of -1 indicates that there
-              was no match (false positive)
-        detected_per_gt - an array of the indices of the detected match for
-              each ground-truth centroid. An index of -1 indicates that there
-              was no match (false negative)
-        precision - the precision of matching - # truly detected / # detected
-        recall - the recall of matching # truly detected / # in ground truth
-        f_score - the f-score
+    Parameters
+    ----------
+    c_detected : array
+        an N1xM array of the detected centroids
+    c_gt : array
+        an N2xM array of the ground-truth centroids
+    max_distance : float
+        maximum allowed distance of a match
+
+    Notes
+    -----
+    a CentroidsScore contains the following attributes:
+        gt_per_detected
+            an array of the indices of the ground-truth match for each detected centroid. \\
+            An index of -1 indicates that there was no match (false positive)
+        detected_per_gt
+            an array of the indices of the detected match for each ground-truth centroid. \\
+            An index of -1 indicates that there was no match (false negative)
+        precision
+            the precision of matching - # truly detected / # detected
+        recall
+            the recall of matching # truly detected / # in ground truth
+        f_score
+            the f-score
+
+    Returns
+    -------
+    CentroidScore : object
+        a CentroidsScore object with the final metrics
+
     """
     # TODO: Fix this docstring for Sphinx
     d_idxs, gt_idxs = match_centroids(c_detected, c_gt, max_distance)
@@ -155,7 +214,12 @@ def score_centroids(c_detected, c_gt, max_distance):
 
 def parse_into_array(path):
     """Parse either a numpy or json-format array
-    :param path: path to array saved using either numpy.save or json.dump
+
+    Parameters
+    ----------
+    path : str
+        path to array saved using either numpy.save or json.dump
+
     """
     if path.endswith(".npy"):
         return np.load(path)

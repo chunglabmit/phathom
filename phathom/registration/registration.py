@@ -18,11 +18,20 @@ from phathom import plotting
 
 
 def chunk_coordinates(shape, chunks):
-    """ Calculate the global coordaintes for each chunk's starting position
+    """Calculate the global coordaintes for each chunk's starting position
 
-    :param shape: shape of the image to chunk
-    :param chunks: shape of each chunk
-    :return: a list containing the starting indices of each chunk
+    Parameters
+    ----------
+    shape : tuple
+        shape of the image to chunk
+    chunks : tuple
+        shape of each chunk
+
+    Returns
+    -------
+    start : list
+        the starting indices of each chunk
+
     """
     nb_chunks = utils.chunk_dims(shape, chunks)
     start = []
@@ -32,12 +41,26 @@ def chunk_coordinates(shape, chunks):
 
 
 def chunk_bboxes(shape, chunks, overlap):
-    """ Calculates the bounding box coordinates for each overlapped chunk
+    """Calculates the bounding box coordinates for each overlapped chunk
 
-    :param shape: overall shape
-    :param chunks: tuple containing the shape of each chunk
-    :param overlap: int indicating number of voxels to overlap adjacent chunks
-    :return: tuple containing the start and stop coordinates for each bbox
+    Parameters
+    ----------
+    shape : tuple
+        overall shape
+    chunks : tuple
+        tuple containing the shape of each chunk
+    overlap : int
+        int indicating number of voxels to overlap adjacent chunks
+
+    Returns
+    -------
+    chunk_coords : list
+        starting indices for each chunk wrt the top-upper-left
+    start : list
+        starting indices for each bbox with overlap
+    stop : list
+        stopping indices for each bbox with overlap
+
     """
     chunk_coords = chunk_coordinates(shape, chunks)
     start = []
@@ -49,11 +72,22 @@ def chunk_bboxes(shape, chunks, overlap):
 
 
 def chunk_generator(z_arr, overlap):
-    """ Reads the chunks from a 3D on-disk zarr array
+    """Reads the chunks from a 3D on-disk zarr array
 
-    :param z_arr: input zarr array
-    :param overlap: int indicating number of voxels to overlap adjacent chunks
-    :return: the next chunk in the zarr array
+    Parameters
+    ----------
+    z_arr : zarr
+        input zarr array
+    overlap : int
+        int indicating number of voxels to overlap adjacent chunks
+
+    Yields
+    ------
+    start : tuple
+        starting index of the next chunk in the `z_arr`
+    stop : tuple
+        stopping index of the next chunk in the `z_arr`
+
     """
     _, starts, stops = chunk_bboxes(z_arr.shape, z_arr.chunks, overlap)
     for start, stop in zip(starts, stops):
@@ -61,12 +95,22 @@ def chunk_generator(z_arr, overlap):
 
 
 def detect_blobs(bbox, z_arr, sigma, min_distance, min_intensity):
-    """ Detects blobs in an image using local maxima
+    """Detects blobs in an image using local maxima
 
-    :param bbox: tuple of two tuples with start-stop indices of chunk
-    :param z_arr: reference to persistent zarr array
-    :param sigma: float for gaussian blurring
-    :return: an (N,3) ndarray of blob coordinates
+    Parameters
+    ----------
+    bbox : tuple
+        tuple of two tuples with start-stop indices of chunk
+    z_arr : zarr
+        reference to persistent zarr array
+    sigma : float
+        float for gaussian blurring
+
+    Returns
+    -------
+    array
+        (N,3) ndarray of blob coordinates
+
     """
     start, stop = bbox
     z0, y0, x0 = start
@@ -86,14 +130,26 @@ def detect_blobs(bbox, z_arr, sigma, min_distance, min_intensity):
 
 
 def detect_blobs_parallel(z_arr, sigma, min_distance, min_intensity, overlap, nb_workers):
-    """ Detects blobs in a chunked zarr array in parallel using local maxima
+    """Detects blobs in a chunked zarr array in parallel using local maxima
 
-    :param z_arr: input zarr array
-    :param sigma: float for gaussian blurring
-    :param min_distance: minimum distance in voxels allowed between blobs
-    :param min_intensity: minimum gray-level intensity allowed for blobs
-    :param overlap: int indicating how much overlap to include between adjacent chunks
-    :return: an (N,3) ndarray of blob coordinates
+    Parameters
+    ----------
+    z_arr : zarr
+        input zarr array
+    sigma : float
+        float for gaussian blurring
+    min_distance : float
+        minimum distance in voxels allowed between blobs
+    min_intensity : float
+        minimum gray-level intensity allowed for blobs
+    overlap : float
+        int indicating how much overlap to include between adjacent chunks
+
+    Returns
+    -------
+    array
+        (N,3) ndarray of blob coordinates
+
     """
     chunk_coords, starts, _ = chunk_bboxes(z_arr.shape, z_arr.chunks, overlap)
 
@@ -127,12 +183,19 @@ def detect_blobs_parallel(z_arr, sigma, min_distance, min_intensity, overlap, nb
 
 
 def pts_to_img(pts, shape, path):
-    """ Saves a set of points into a binary image
+    """Saves a set of points into a binary image
 
-    :param pts: an (N, D) array with N D-dimensional points
-    :param shape: a tuple describing the overall shape of the image
-    :param path: path to save the output tiff image
-    :return: a uint8 ndarray
+    Parameters
+    ----------
+    pts: an (N, D) array with N D-dimensional points
+    shape: a tuple describing the overall shape of the image
+    path: path to save the output tiff image
+
+    Returns
+    -------
+    img : array
+        An 8-bit image array
+
     """
     from skimage.external import tifffile
     img = np.zeros(shape, dtype='uint8')
@@ -142,11 +205,20 @@ def pts_to_img(pts, shape, path):
 
 
 def mark_pts(arr, pts):
-    """ Mark a list of points in an array using 3-voxel cubes
+    """Mark a list of points in an array using 3-voxel cubes
 
-    :param arr: Input array to modify
-    :param pts: Points to mark
-    :return: Original array with the blob marked
+    Parameters
+    ----------
+    arr : array
+        Input array to modify
+    pts : array
+        Points to mark
+
+    Returns
+    -------
+    arr : array
+        Original array with the blob marked
+
     """
     for pt in pts:
         arr[pt[0], pt[1], pt[2]] = 255
@@ -158,11 +230,20 @@ def mark_pts(arr, pts):
 
 
 def label_pts(arr, pts):
-    """ Mark a list of points in an array using 3-voxel cubes
+    """Mark a list of points in an array using 3-voxel cubes
 
-    :param arr: Input array to modify
-    :param pts: Points to label
-    :return: Original array with the blob marked
+    Parameters
+    ----------
+    arr : array
+        Input array to modify
+    pts : array
+        Points to label
+
+    Returns
+    -------
+    arr : array
+        Original array with the blob marked
+
     """
     for i, pt in enumerate(pts):
         label = i+1
@@ -175,10 +256,22 @@ def label_pts(arr, pts):
 
 
 def estimate_rigid(fixed_inliers, moving_inliers):
-    """ Estimate a rigid transformation from fixed to moving points using SVD.
+    """Estimate a rigid transformation from fixed to moving points using SVD
 
-    :param fixed_inliers: Array (N, 3) of fixed coordinates
-    :param moving_inliers: Array (N, 3) of corresponding moving coordinates
+    Parameters
+    ----------
+    fixed_inliers : array
+        array (N, 3) of fixed coordinates
+    moving_inliers: array
+        array (N, 3) of corresponding moving coordinates
+
+    Returns
+    -------
+    t : array
+        translation vector
+    r : array
+        rotation matrix
+
     """
     # Find centroids
     fixed_centroid = np.mean(fixed_inliers, axis=0)
@@ -195,63 +288,97 @@ def estimate_rigid(fixed_inliers, moving_inliers):
 
 
 def rigid_transformation(t, r, pts):
-    """ Apply rotation and translation (rigid transformtion) to a set of points.
+    """Apply rotation and translation (rigid transformtion) to a set of points
 
-    :param t: 1D array representing the translation vector
-    :param r: 2D array representing the rotation matrix
+    Parameters
+    ----------
+    t : array
+        1D array representing the translation vector
+    r : array
+        2D array representing the rotation matrix
+
     """
     return r.dot(pts.T).T + t
 
 
 def indices_to_um(pts, voxel_dimensions):
-    """ Convert indicies to micron units wrt the top-upper-left.
+    """Convert indicies to micron units wrt the top-upper-left
 
-    :param pts: 2D array (N, D) of ints to convert
-    :param voxel_dimensions: 1D array (D,) of floats representing voxel shape
+    Parameters
+    ----------
+    pts : array
+        2D array (N, D) of ints to convert
+    voxel_dimensions : array
+        1D array (D,) of floats representing voxel shape
+
     """
     return np.array([d*pts[:, i] for d, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
 
 
 def um_to_indices(pts_um, voxel_dimensions):
-    """ Convert micron units wtf top-upper-left to indices
+    """Convert micron units wtf top-upper-left to indices
 
-    :param pts_um: 2D array (N, D) of floats in micron to convert
-    :param voxel_dimensions: 1D array (D,) of floats representing voxel shape
+    Parameters
+    ----------
+    pts_um : array
+        2D array (N, D) of floats in micron to convert
+    voxel_dimensions: array
+        1D array (D,) of floats representing voxel shape
+
     """
     return np.array([pts_um[:, i]/d for d, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
 
 
 def rigid_residuals(t, r, fixed_pts, moving_pts):
-    """ Compute the residuals for all points after the rigid transformation
+    """Compute the residuals for all points after the rigid transformation
 
-    :param t: 1D array (D,) of the translation
-    :param r: 2D array (D, D) of the rotation matrix
-    :param fixed_pts: 2D array (N, D) of points to transform
-    :param moving_pts: 2D array (N, D) of target points
+    Parameters
+    ----------
+    t : array
+        1D array (D,) of the translation
+    r : array
+        2D array (D, D) of the rotation matrix
+    fixed_pts : array
+        2D array (N, D) of points to transform
+    moving_pts : array
+        2D array (N, D) of target points
+
     """
     return moving_pts - rigid_transformation(t, r, fixed_pts)
 
 
 def residuals_to_distances(residuals):
-    """ Compute the Euclidean distances given residuals in each dimension.
+    """Compute the Euclidean distances given residuals in each dimension
 
-    :param residuals: 2D array (N, D) of residuals
+    Parameters
+    ----------
+    residuals : array
+        2D array (N, D) of residuals
+
     """
     return np.linalg.norm(residuals, axis=-1)
 
 
 def average_distance(distances):
-    """ Compute the average Euclidean distance over a sequence of distances
+    """Compute the average Euclidean distance over a sequence of distances
 
-    :param average_distance: 1D array (N,) of distances
+    Parameters
+    ----------
+    distances : array
+        1D array (N,) of distances
+
     """
     return np.mean(distances)
 
 
 def shape_to_coordinates(shape):
-    """ Build an array containing all array indices for a given shape.
+    """Build an array containing all array indices for a given shape
 
-    :param shape: array-like containing 3 ints representing the array shape
+    Parameters
+    ----------
+    shape : array-like
+        array-like containing 3 ints representing the array shape
+
     """
     indices = np.indices(shape)
     z_idx = indices[0].flatten()
@@ -261,11 +388,17 @@ def shape_to_coordinates(shape):
 
 
 def interpolate(image, coordinates, order=3):
-    """ Interpolate an image at a list of coodinates.
+    """Interpolate an image at a list of coodinates
 
-    :param image: array to interpolate
-    :param coordinates: 2D array (N, D) of N coordinates to be interpolated
-    :param order: polynomial order of the interpolation (default: 3, cubic)
+    Parameters
+    ----------
+    image : array
+        array to interpolate
+    coordinates : array
+        2D array (N, D) of N coordinates to be interpolated
+    order : int
+        polynomial order of the interpolation (default: 3, cubic)
+
     """
     output = map_coordinates(image,
                              coordinates.T,
@@ -278,9 +411,13 @@ def interpolate(image, coordinates, order=3):
 
 
 def rotation_matrix(thetas):
-    """ Create a 3D rotation matrix given rotations about each axis.
+    """Create a 3D rotation matrix given rotations about each axis
 
-    :param thetas: array-like with 3 rotation angles in radians
+    Parameters
+    ----------
+    thetas : array-like
+        array-like with 3 rotation angles in radians
+
     """
     rz = np.eye(3)
     rz[1, 1] = np.cos(thetas[0])
@@ -301,10 +438,15 @@ def rotation_matrix(thetas):
 
 
 def ncc(fixed, registered):
-    """ Calculate the normalized cross-correlation between two images.
+    """Calculate the normalized cross-correlation between two images
 
-    :param fixed: array of first image to be compared
-    :param registered: array of second image to be compared
+    Parameters
+    ----------
+    fixed : array
+        array of first image to be compared
+    registered: array
+        array of second image to be compared
+
     """
     idx = np.where(registered>0)
     a = fixed[idx]
@@ -313,10 +455,15 @@ def ncc(fixed, registered):
 
 
 def mean_square_error(fixed, transformed):
-    """ Calculate the nmean squared error between two images.
+    """Calculate the nmean squared error between two images
 
-    :param fixed: array of first image to be compared
-    :param registered: array of second image to be compared
+    Parameters
+    ----------
+    fixed : array
+        array of first image to be compared
+    transformed : array
+        array of second image to be compared
+
     """
     idx = np.where(transformed > 0)
     a = fixed[idx]
@@ -325,14 +472,23 @@ def mean_square_error(fixed, transformed):
 
 
 def register_chunk(moving_img, fixed_img, output_img, transformation, start, batch_size=None):
-    """ Apply transformation and interpolate for a single chunk in the output.
+    """Apply transformation and interpolate for a single chunk in the output
 
-    :param moving_img: zarr array with read access to interpolate
-    :param fixed_img: zarr array with read access (used for shape info)
-    :param output_img: zarr array with write access for output
-    :param transformation: callable that takes a single "pts" argument
-    :param start: starting index of the chunk to write
-    :param batch_size: number of points to apply the transformation on at once
+    Parameters
+    ----------
+    moving_img : zarr array
+        zarr array with read access to interpolate
+    fixed_img : zarr array
+        zarr array with read access (used for shape info)
+    output_img : zarr array
+        zarr array with write access for output
+    transformation : callable
+        callable that takes a single "pts" argument
+    start : tuple
+        starting index of the chunk to write
+    batch_size : int
+        number of points to apply the transformation on at once
+
     """
     # Get dimensions
     chunks = np.array(output_img.chunks)
@@ -384,14 +540,23 @@ def register_chunk(moving_img, fixed_img, output_img, transformation, start, bat
 
 
 def register(moving_img, fixed_img, output_img, transformation, nb_workers, batch_size=None):
-    """ Transform a moving zarr array for registration.
+    """Transform a moving zarr array for registration
 
-    :param moving_img: zarr array with read access to be interpolated
-    :param fixed_img: zarr array with read access for the target
-    :param output_img: zarr array with write acces for the output
-    :param transformation: callable that takes one "pts" argument
-    :param nb_workers: number of processes to work on separate chunks
-    :param batch_size: number of points to apply the transformation on at once
+    Parameters
+    ----------
+    moving_img: zarr array
+        zarr array with read access to be interpolated
+    fixed_img: zarr array
+        zarr array with read access for the target
+    output_img : zarr array
+        zarr array with write acces for the output
+    transformation : callable
+        function that takes one "pts" argument and warps them
+    nb_workers : int
+        number of processes to work on separate chunks
+    batch_size : int
+        number of points to apply the transformation on at once
+
     """
     start_coords = chunk_coordinates(fixed_img.shape, fixed_img.chunks)
     args_list = []
@@ -471,11 +636,17 @@ def rigid_registration():
 
 
 def pcloud_hist(pts, dimensions, bin_size):
-    """ Compute the histogram of a 3D point cloud.
+    """Compute the histogram of a 3D point cloud
 
-    :param pts: 2D array (N, D) of points
-    :param dimensions: overall dimensions of the histogram (image bounds)
-    :param bin_size: float representing the dimension of each bin
+    Parameters
+    ----------
+    pts : array
+        2D array (N, D) of points
+    dimensions : tuple or array
+        overall dimensions of the histogram (image bounds)
+    bin_size : float
+        the physical dimension of each bin
+
     """
     # Find CoM (TUP offsets in um)
     centroid = pts.mean(axis=0)
