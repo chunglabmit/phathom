@@ -13,8 +13,15 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import sys
+sys.path.insert(0, os.path.abspath('../phathom'))
+sys.path.insert(0, os.path.abspath('../phathom/atlas'))
+sys.path.insert(0, os.path.abspath('../phathom/db'))
+sys.path.insert(0, os.path.abspath('../phathom/io'))
+sys.path.insert(0, os.path.abspath('../phathom/phenotype'))
+sys.path.insert(0, os.path.abspath('../phathom/preprocess'))
+sys.path.insert(0, os.path.abspath('../phathom/registration'))
+sys.path.insert(0, os.path.abspath('../phathom/segmentation'))
 
 
 # -- Project information -----------------------------------------------------
