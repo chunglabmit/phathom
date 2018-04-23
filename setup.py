@@ -19,7 +19,6 @@ setup(
         "zarr",
         "numpy",
         "h5py",
-        "pyina",  # should point to the python3 compatible version
         "tqdm",
         "scikit-learn"
     ],
