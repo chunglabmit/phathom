@@ -1,6 +1,10 @@
-"""
-Conversion module
-=================
+"""Conversion
+
+This module provides functions for converting between large image formats.
+Conversion between the following file formats is supported:
+- Tiff
+- Zarr
+- HDF5 / Imaris
 
 Main functionality:
 

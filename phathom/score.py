@@ -54,9 +54,9 @@ def recall(n_true_positive, n_false_negative):
     References
     ----------
     "recall  is the fraction of relevant instances that have been retrieved
-    over the total amount of relevant instances [1]_"
+    over the total amount of relevant instances [2]_"
 
-    .. [1] https://en.wikipedia.org/wiki/Precision_and_recall
+    .. [2] https://en.wikipedia.org/wiki/Precision_and_recall
 
     """
     try:
