@@ -5,9 +5,9 @@ from phathom import score
 
 class TestPrecision(unittest.TestCase):
     def test(self):
-        tp = [ 100, 0]
-        fp = [ 25, 100]
-        expected = [ 100. / 125., 0]
+        tp = [100, 0]
+        fp = [25, 100]
+        expected = [100. / 125., 0]
         for tpp, fpp, e in zip(tp, fp, expected):
             self.assertAlmostEqual(e, score.precision(tpp, fpp))
 
@@ -17,9 +17,9 @@ class TestPrecision(unittest.TestCase):
 
 class TestRecall(unittest.TestCase):
     def test(self):
-        tp = [ 100, 0]
-        fn = [ 50, 100]
-        expected = [ 100. / 150., 0]
+        tp = [100, 0]
+        fn = [50, 100]
+        expected = [100. / 150., 0]
         for tpp, fnn, e in zip(tp, fn, expected):
             self.assertAlmostEqual(e, score.recall(tpp, fnn))
 
