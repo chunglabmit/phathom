@@ -7,24 +7,84 @@ from sklearn import linear_model
 from skimage import filters
 import multiprocessing
 import tqdm
-from phathom import plotting
-
-# Set consistent numpy random state
-np.random.seed(123)
+# from phathom import plotting
 
 
-def synthesize_pts(nb_pts, mean, sigma):
-    covariance = np.diag(sigma**2)
-    mn = multivariate_normal(mean=mean, cov=covariance)
-    pts = mn.rvs(size=nb_pts)
-    return pts
+def rotation_matrix(thetas):
+    """Create a 3D rotation matrix given rotations about each axis
+
+    Parameters
+    ----------
+    thetas : array-like
+        array-like with 3 rotation angles in radians
+
+    """
+    rz = np.eye(3)
+    rz[1, 1] = np.cos(thetas[0])
+    rz[2, 2] = np.cos(thetas[0])
+    rz[1, 2] = -np.sin(thetas[0])
+    rz[2, 1] = np.sin(thetas[0])
+    ry = np.eye(3)
+    ry[0, 0] = np.cos(thetas[1])
+    ry[2, 2] = np.cos(thetas[1])
+    ry[0, 2] = np.sin(thetas[1])
+    ry[2, 0] = -np.sin(thetas[1])
+    rx = np.eye(3)
+    rx[0, 0] = np.cos(thetas[2])
+    rx[1, 1] = np.cos(thetas[2])
+    rx[0, 1] = -np.sin(thetas[2])
+    rx[1, 0] = np.sin(thetas[2])
+    return rz.dot(ry).dot(rx)
 
 
-def remove_random_pts(pts, frac):
-    nb_pts = pts.shape[0]
-    np.random.shuffle(pts)
-    nb_missing = int(nb_pts*frac)
-    return pts[:nb_pts-nb_missing]
+def rotate(points, thetas, center=None):
+    """Rotate `points` in 3D
+
+    Parameters
+    ----------
+    points : tuple
+        tuple of coordiante arrays for points to be rotated
+    thetas : array-like
+        angles (in radians) to rotate the points for each axis
+    center : array-like
+        coordinates for the center of rotation
+
+    Returns
+    -------
+    rotated : tuple
+        tuple of coordinate arrays for rotated points
+
+    """
+    try:
+        if len(points) != len(thetas):
+            raise ValueError('thetas must contain a rotation for each dimension')
+        else:
+            d = len(points)
+            n = len(points[0])
+    except TypeError:
+        raise ValueError('points and thetas must both be iterables')
+    except IndexError:
+        ValueError('points tuple must contain at least one non-empty array')
+
+    if center is None:
+        center = np.zeros(d)
+    else:
+        if len(center) == d:
+            center = np.asarray(center)
+        else:
+            raise ValueError('provided center with the wrong number of dimensions')
+
+    points = np.asarray(points)  # d-by-n
+    r = rotation_matrix(thetas)
+    center = center[:, np.newaxis]
+    shifted = points - center
+    shifted_rotated = r.dot(shifted)
+    rotated = shifted_rotated + center
+    return tuple(rotated)
+
+
+
+
 
 
 def get_transformation(zdeg, ydeg, xdeg):
