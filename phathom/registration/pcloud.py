@@ -1,13 +1,11 @@
 import numpy as np
 import scipy
-from scipy.stats import multivariate_normal
 from scipy.spatial.distance import cdist
 from sklearn.neighbors import NearestNeighbors, kneighbors_graph
 from sklearn import linear_model
 from skimage import filters
 import multiprocessing
 import tqdm
-# from phathom import plotting
 
 
 def rotation_matrix(thetas):
@@ -22,8 +20,8 @@ def rotation_matrix(thetas):
     rz = np.eye(3)
     rz[1, 1] = np.cos(thetas[0])
     rz[2, 2] = np.cos(thetas[0])
-    rz[1, 2] = -np.sin(thetas[0])
-    rz[2, 1] = np.sin(thetas[0])
+    rz[1, 2] = np.sin(thetas[0])
+    rz[2, 1] = -np.sin(thetas[0])
     ry = np.eye(3)
     ry[0, 0] = np.cos(thetas[1])
     ry[2, 2] = np.cos(thetas[1])
@@ -73,7 +71,6 @@ def rotate(points, thetas, center=None):
             center = np.asarray(center)
         else:
             raise ValueError('provided center with the wrong number of dimensions')
-
     points = np.asarray(points)  # d-by-n
     r = rotation_matrix(thetas)
     center = center[:, np.newaxis]
@@ -83,46 +80,31 @@ def rotate(points, thetas, center=None):
     return tuple(rotated)
 
 
-
-
-
-
-def get_transformation(zdeg, ydeg, xdeg):
-    ztheta = zdeg/180*np.pi
-    ytheta = ydeg/180*np.pi
-    xtheta = xdeg/180*np.pi
-    Tz = np.array( [[np.cos(ztheta), -np.sin(ztheta), 0],
-                   [np.sin(ztheta),  np.cos(ztheta), 0],
-                   [0, 				0,  		   1]])
-    Ty = np.array( [[np.cos(ytheta), 0, np.sin(ytheta)],
-                   [0,  			1, 0],
-                   [-np.sin(ytheta), 0, np.cos(ytheta)]])
-    Tx = np.array( [[1, 0, 				0],
-                   [0,  np.cos(xtheta), -np.sin(xtheta)],
-                   [0, 	np.sin(xtheta), np.cos(xtheta)]])
-    T = Tz.dot(Ty).dot(Tx)
-    return T
-
-
-def transform_pts(pts, transform, noise_level=0):
-    if noise_level > 0:
-        noise = noise_level*(2*np.random.random(size=pts.T.shape)-1)
-    else:
-        noise = 0
-    transformed_pts = np.dot(transform, pts.T) + noise
-    return transformed_pts.T
-
-
 def geometric_hash(center, vectors):
-    # Use QR Decomposition
+    """Calculates the geometric hash of a set of `vectors` around `center`
+
+    The geometric hash is a rotation invariant descriptor of the relative
+    positions of the `vectors` with respect to `center`
+
+    Parameters
+    ----------
+    center : ndarray
+        coorindates of the center point
+    vectors : ndarray
+        a (3, 3) array of neighboring point coordinates as rows
+
+    Returns
+    -------
+    features : array
+        a (6,) array of the geometric hashing result
+
+    """
     a = np.vstack([vectors[2]-center, vectors[0]-center, vectors[1]-center]).T
-    q, r = np.linalg.qr(a)
+    _, r = np.linalg.qr(a)
     d = np.diag(np.sign(np.diag(r)))
-    q = q.dot(d)
     r = d.dot(r)
-    # u, s, v = np.linalg.svd(a)
-    feat_vector = r[np.triu_indices(3)]
-    return feat_vector  # / np.linalg.norm(feat_vector)
+    features = r[np.triu_indices(3)]
+    return features
 
 
 def geometric_features(pts, nb_workers):
@@ -130,20 +112,18 @@ def geometric_features(pts, nb_workers):
 
     Parameters
     ----------
-    pts : array
+    pts : ndarray
         2D array (N, 3) of points
     nb_workers : int
         number of processes to calculate features in parallel
 
     Returns
     -------
-    features : array
+    features : ndarray
         (N, 6) array of geometric features
 
     """
-    # Performance params available: leaf_size and n_jobs
     nbrs = NearestNeighbors(n_neighbors=4, algorithm='kd_tree', n_jobs=-1).fit(pts)
-
     distances, indices = nbrs.kneighbors(pts)
     # indices is len(pts) by 3, in order of decreasing distance
 
@@ -154,10 +134,7 @@ def geometric_features(pts, nb_workers):
     with multiprocessing.Pool(processes=nb_workers) as pool:
         features = pool.starmap(geometric_hash, args)
 
-    # converting to a numpy array is pretty slow
-    features = np.array(features)
-
-    return features
+    return np.asarray(features)
 
 
 def find_similar(feat_stationary, feat_moving):
@@ -409,96 +386,12 @@ def coord_mapping(fixed_coords, c, matches_stationary, smoothing):
     return moving_coords
 
 
-def consumer(queue, io_lock, c, matches_stationary, smoothing, img_moving, img_registered):
-    while True:
-        item = queue.get()
-        if item is None:
-            break
-        else:
-            fixed_coord = item
-
-        moving_coord = coord_mapping(fixed_coord, c, matches_stationary, smoothing)
-
-        nearest = np.round(moving_coord)[0]
-
-        z = int(nearest[0])
-        y = int(nearest[1])
-        x = int(nearest[2])
-        if z >= img_registered.shape[0]:
-            z = img_registered.shape[0]-1
-        elif z < 0:
-            z = 0
-        if y >= img_registered.shape[1]:
-            y = img_registered.shape[1]-1
-        elif y < 0:
-            y = 0
-        if x >= img_registered.shape[2]:
-            x = img_registered.shape[2]-1
-        elif x < 0:
-            x = 0
-
-        interpolated_value = img_moving[z, y, x]
-
-        # interpolated_value = map_coordinates(img_moving, moving_coord.T)
-
-        with io_lock:
-            print('Nearest', nearest)
-            # img_registered[fixed_coord[0], fixed_coord[1], fixed_coord[2]] = interpolated_value
-
-
 def get_nb_chunks(img):
     return tuple(int(np.ceil(img_dim/chunk_dim)) for img_dim, chunk_dim in zip(img.shape, img.chunks))
 
 
 def get_chunk_index(chunk_shape, chunk_idx):
     return np.array([int(i*dim) for i, dim in zip(chunk_idx, chunk_shape)])
-
-
-def do_work(img_fixed, img_moving, img_registered, start, local_coords, batch_size, c, matches_stationary, smoothing):
-    chunk_shape = np.array(img_fixed.chunks)
-    img_shape = np.array(img_fixed.shape)
-
-    global_coords = start + local_coords
-
-    stop = start + chunk_shape
-    if (stop[0]>img_shape[0]):
-        stop[0] = img_shape[0]
-        z_outbounds = np.where(global_coords[:,0] >= img_fixed.shape[0])[0]
-        global_coords = np.delete(global_coords, z_outbounds, axis=0)
-    if (stop[1]>img_shape[1]):
-        stop[1] = img_shape[1]
-        y_outbounds = np.where(global_coords[:,1] >= img_fixed.shape[1])[0]
-        global_coords = np.delete(global_coords, y_outbounds, axis=0)
-    if (stop[2]>img_shape[2]):
-        stop[2] = img_shape[2]
-        x_outbounds = np.where(global_coords[:,2] >= img_fixed.shape[2])[0]
-        global_coords = np.delete(global_coords, x_outbounds, axis=0)
-
-    output_shape = tuple(t-s for s,t in zip(start, stop))
-
-    moving_coords = np.zeros(global_coords.shape)
-    for i in range(int(np.ceil(global_coords.shape[0]/batch_size))):
-        idx1 = i*batch_size
-        idx2 = min(global_coords.shape[0], idx1+batch_size)
-        moving_coords[idx1:idx2] = coord_mapping(global_coords[idx1:idx2], c, matches_stationary, smoothing)
-    z_coords_clip = np.clip(moving_coords[:,0], 0, img_moving.shape[0]-1)
-    y_coords_clip = np.clip(moving_coords[:,1], 0, img_moving.shape[1]-1)
-    x_coords_clip = np.clip(moving_coords[:,2], 0, img_moving.shape[2]-1)
-
-    invalid_mask = np.where(np.logical_or(np.logical_or(moving_coords[:,0]!=z_coords_clip,
-                                                        moving_coords[:,1]!=y_coords_clip),
-                                            moving_coords[:,2]!=x_coords_clip))[0]
-
-    moving_coords = np.round(np.vstack([z_coords_clip, y_coords_clip, x_coords_clip]).T).astype('uint32')
-
-    interp_values = img_moving.vindex[moving_coords[:,0].tolist(),
-                                    moving_coords[:,1].tolist(),
-                                    moving_coords[:,2].tolist()]
-    interp_values[invalid_mask] = 0
-
-    interp_chunk = np.reshape(interp_values, output_shape)
-
-    img_registered[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]] = interp_chunk
 
 
 def main():
