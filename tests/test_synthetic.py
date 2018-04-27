@@ -71,7 +71,6 @@ class TestBinaryToBlobs(unittest.TestCase):
         binary = synthetic.points_to_binary(points=points, shape=shape)
         for sigma, target in zip(sigmas, targets):
             blobs = synthetic.binary_to_blobs(binary, sigma)
-            print(blobs[test_points])
             self.assertEqual(blobs[points], 1)
             self.assertAlmostEqual(blobs[test_points], target)
 

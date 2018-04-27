@@ -137,6 +137,143 @@ def geometric_features(pts, nb_workers):
     return np.asarray(features)
 
 
+def calculate_distance(target, candidates):
+    dists = cdist(target.reshape(1, -1), candidates)[0]
+    return dists
+
+
+def check_distance(dists, max_dist):
+    """Check whether or not `dists` are less than `max_dist`
+
+    Parameters
+    ----------
+    dists : ndarray
+        (N,) array with input distances to check
+    max_dist : float
+        maximum Euclidean distance for a candidate point to be considered close
+
+    Returns
+    -------
+    close : tuple or None
+        tuple of coordinate arrays for those points that are close or None.
+
+    """
+    if dists.ndim != 1:
+        raise ValueError('candidates must be one dimensional')
+    indicators = list(map(lambda d: d < max_dist, dists))
+    close = np.where(indicators)
+    if len(close[0]) == 0:
+        close = None
+    return close
+
+
+def prominence(d1, d2):
+    """Calculate the prominence of set of points based on the two nearest neighbor distances
+
+    Prominence is defined as the ratio of nearest and 2nd nearest neighbor distances.
+    Lower prominence values indicate nearest neighbors that "stand out" more.
+    This function doesn't verify that all d1 values are less than or equal to d2 values.
+
+    Parameters
+    ----------
+    d1 : ndarray
+        (N,) array containing the distances of the nearest neighbors
+    d2 : ndarray
+        (N,) array containing the distance of the 2nd-nearest neighbors
+
+    Returns
+    -------
+    prom : ndarray
+        (N,) array of calculated prominences for each point
+
+    """
+    if d1.shape != d2.shape:
+        raise ValueError('d1 and d2 must have the same shape')
+    else:
+        if d1.ndim != 1:
+            raise ValueError('d1 and d2 must both be one dimensional')
+
+    return d1 / np.clip(d2, 1e-6, None)
+
+
+def check_prominence(prom, threshold):
+    """Check which prominences in `prom` are below a given `threshold`
+
+    Parameters
+    ----------
+    prom : ndarray
+        (N,) array of prominences
+    threshold : float
+        maximum prominence value for a point to be considered "prominent"
+
+    Returns
+    -------
+    prominent : tuple or None
+        a tuple of coordinate arrays for the found prominent points
+
+    """
+    indicators = list(map(lambda p: p < threshold, prom))
+    prominent = np.where(indicators)
+
+    if len(prominent[0]) == 0:
+        prominent = None
+
+    return prominent
+
+
+def global_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None):
+    """Perform point matching based on feature distances
+
+    Parameters
+    ----------
+    feat_fixed : ndarray
+        (N, D) array of D dimensional features for N fixed points
+    feat_moving : ndarray
+        (M, D) array of D dimensional features for M moving points
+    max_fdist : float
+        maximum allowed Euclidean distance in feature space to be considered a match
+    prom_thresh : float
+        maximum allowed prominence ratio to be considered a match
+
+    Returns
+    -------
+    idx_fixed : ndarray or None
+        indices of fixed point matches. None is returned is no matches are found
+    idx_moving : ndarray or None
+        indices of moving point matches. None is returned if no matches are found
+
+    """
+    # TODO: this kd_tree building and querying should be done in a separate function
+    nbrs = NearestNeighbors(n_neighbors=2, algorithm='kd_tree', n_jobs=-1).fit(feat_moving)
+    fdists, idxs_moving = nbrs.kneighbors(feat_fixed)
+
+    nb_fixed = len(feat_fixed)
+    idx_fixed = np.arange(nb_fixed)
+
+    if max_fdist is not None:
+        close = check_distance(fdists[:, 0], max_fdist)
+        if close is None:
+            return None
+        else:
+            fdists = fdists[close]
+            idxs_moving = idxs_moving[close]
+            idx_fixed = idx_fixed[close]
+
+    if prom_thresh is not None:
+        prom = prominence(fdists[:, 0], fdists[:, 1])
+        prominent = check_prominence(prom, prom_thresh)
+        if prominent is None:
+            return None
+        else:
+            fdists = fdists[prominent]
+            idxs_moving = idxs_moving[prominent]
+            idx_fixed = idx_fixed[prominent]
+
+    idx_moving = idxs_moving[:, 0]
+
+    return idx_fixed, idx_moving
+
+
 def find_similar(feat_stationary, feat_moving):
     feature_nbrs = NearestNeighbors(n_neighbors=1, algorithm='kd_tree', n_jobs=-1).fit(feat_moving)
     return feature_nbrs.kneighbors(feat_stationary)
