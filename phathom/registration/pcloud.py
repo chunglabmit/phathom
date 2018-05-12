@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 from scipy.spatial.distance import cdist
-from sklearn.neighbors import NearestNeighbors, kneighbors_graph
+from sklearn.neighbors import NearestNeighbors
 from sklearn import linear_model
 from skimage import filters
 import multiprocessing
@@ -58,9 +58,8 @@ def rotate(points, thetas, center=None):
             raise ValueError('thetas must contain a rotation for each dimension')
         else:
             d = len(points)
-            n = len(points[0])
     except TypeError:
-        raise ValueError('points and thetas must both be iterables')
+        raise ValueError('points and thetas must both be iterable')
     except IndexError:
         ValueError('points tuple must contain at least one non-empty array')
 
@@ -137,11 +136,6 @@ def geometric_features(pts, nb_workers):
     return np.asarray(features)
 
 
-def calculate_distance(target, candidates):
-    dists = cdist(target.reshape(1, -1), candidates)[0]
-    return dists
-
-
 def check_distance(dists, max_dist):
     """Check whether or not `dists` are less than `max_dist`
 
@@ -154,16 +148,14 @@ def check_distance(dists, max_dist):
 
     Returns
     -------
-    close : tuple or None
-        tuple of coordinate arrays for those points that are close or None.
+    close : tuple
+        tuple of coordinate arrays for those points that are close.
 
     """
     if dists.ndim != 1:
         raise ValueError('candidates must be one dimensional')
     indicators = list(map(lambda d: d < max_dist, dists))
     close = np.where(indicators)
-    if len(close[0]) == 0:
-        close = None
     return close
 
 
@@ -208,21 +200,46 @@ def check_prominence(prom, threshold):
 
     Returns
     -------
-    prominent : tuple or None
+    prominent : tuple
         a tuple of coordinate arrays for the found prominent points
 
     """
     indicators = list(map(lambda p: p < threshold, prom))
     prominent = np.where(indicators)
-
-    if len(prominent[0]) == 0:
-        prominent = None
-
     return prominent
 
 
-def global_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None):
-    """Perform point matching based on feature distances
+def build_neighbors(X, n_neighbors=1, radius=1.0, algorithm='auto', n_jobs=1):
+    """Instantiate a NearestNeighbors classifier and fit it to `points`
+
+    Parameters
+    ----------
+    X : ndarray
+        (N, D) array of D-dimensional data points
+    n_neighbors : int
+        number of neighbors to use for kneighbor queries by default
+    radius : float
+        range of parameter space to use for radius_neighbor queries by default
+    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'}, optional
+        algorithm used to calculate the nearest neighbors
+    n_jobs : int
+        number of parallel jobs used to run for kneighbors searches. -1 uses all CPU cores.
+
+    Returns
+    -------
+    nbrs : NearestNeighbors
+        NearestNeighbors object containing a built kd-tree
+
+    """
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors,
+                            radius=radius,
+                            algorithm=algorithm,
+                            n_jobs=n_jobs)
+    return nbrs.fit(X)
+
+
+def feature_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None, algorithm='auto', n_jobs=1):
+    """Find moving point matches for all fixed points based on feature distance and prominence
 
     Parameters
     ----------
@@ -234,119 +251,179 @@ def global_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None):
         maximum allowed Euclidean distance in feature space to be considered a match
     prom_thresh : float
         maximum allowed prominence ratio to be considered a match
+    algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'}, optional
+        algorithm used to compute the nearest neighbors
+    n_jobs : int, optional
+        number of parallel jobs to use for kneighbors query. -1 defaults to the number of CPU cores
 
     Returns
     -------
-    idx_fixed : ndarray or None
-        indices of fixed point matches. None is returned is no matches are found
-    idx_moving : ndarray or None
-        indices of moving point matches. None is returned if no matches are found
+    idx_fixed : ndarray
+        indices of fixed point matches. Empty if no matches are found
+    idx_moving : ndarray
+        indices of moving point matches. Empty if no matches are found
 
     """
-    # TODO: this kd_tree building and querying should be done in a separate function
-    nbrs = NearestNeighbors(n_neighbors=2, algorithm='kd_tree', n_jobs=-1).fit(feat_moving)
+    try:
+        if feat_fixed.ndim != 2:
+            raise ValueError('feat_fixed is not two-dimensional')
+        if feat_moving.ndim != 2:
+            raise ValueError('feat_moving is not two-dimensional')
+        if feat_fixed.shape[1] != feat_moving.shape[1]:
+            raise ValueError('the second dimension of feat_fixed and feat_moving do not match')
+    except TypeError:
+        raise ValueError('feat_fixed or feat_moving is not an ndarray')
+
+    if feat_moving.shape[0] == 1:
+        n_neighbors = 1
+    else:
+        n_neighbors = 2
+
+    nbrs = build_neighbors(X=feat_moving, n_neighbors=n_neighbors, algorithm=algorithm, n_jobs=n_jobs)
     fdists, idxs_moving = nbrs.kneighbors(feat_fixed)
+    idx_fixed = np.arange(feat_fixed.shape[0])
 
-    nb_fixed = len(feat_fixed)
-    idx_fixed = np.arange(nb_fixed)
-
+    # filter on feature distance
     if max_fdist is not None:
         close = check_distance(fdists[:, 0], max_fdist)
-        if close is None:
-            return None
-        else:
-            fdists = fdists[close]
-            idxs_moving = idxs_moving[close]
-            idx_fixed = idx_fixed[close]
+        fdists = fdists[close]
+        idxs_moving = idxs_moving[close]
+        idx_fixed = idx_fixed[close]
+        if close[0].size == 0:
+            return idx_fixed, idxs_moving[:, 0]
 
-    if prom_thresh is not None:
+    # filter on prominence
+    if prom_thresh is not None and feat_moving.shape[0] > 1:
         prom = prominence(fdists[:, 0], fdists[:, 1])
         prominent = check_prominence(prom, prom_thresh)
-        if prominent is None:
-            return None
-        else:
-            fdists = fdists[prominent]
-            idxs_moving = idxs_moving[prominent]
-            idx_fixed = idx_fixed[prominent]
+        fdists = fdists[prominent]
+        idxs_moving = idxs_moving[prominent]
+        idx_fixed = idx_fixed[prominent]
 
-    idx_moving = idxs_moving[:, 0]
-
-    return idx_fixed, idx_moving
+    return idx_fixed, idxs_moving[:, 0]
 
 
-def find_similar(feat_stationary, feat_moving):
-    feature_nbrs = NearestNeighbors(n_neighbors=1, algorithm='kd_tree', n_jobs=-1).fit(feat_moving)
-    return feature_nbrs.kneighbors(feat_stationary)
+def radius_matching(point_fixed, feat_fixed, spatial_nbrs_moving, feats_moving, matching_kwargs=None):
+    """Search radius neighborhood in `spatial_nbrs_moving` for a match of `point_fixed`
+
+    Parameters
+    ----------
+    point_fixed : ndarray
+        (D,) array of the D spatial coordinates of the fixed point
+    feat_fixed : ndarray
+        (F,) array of the F features of the fixed point
+    spatial_nbrs_moving : NearestNeighbors
+        trained NearestNeighbors object to efficiently query nearby moving points
+    feats_moving : ndarray
+        (M, F) array of F features for all M moving points
+    matching_kwargs : dict, optional
+        keyword arguments to pass to `feature_matching` for filtering the candidate matches. Default is None,
+        which will not filter the matches and use a single worker.
+
+    Returns
+    -------
+    match : int or None
+        if a match is found in the moving points, then it's index is returned. Otherwise, None.
+
+    """
+    idxs_moving = spatial_nbrs_moving.radius_neighbors(point_fixed, return_distance=False)
+
+    if idxs_moving.size == 0:
+        # no nearby points, don't bother
+        return None
+
+    max_fdist = matching_kwargs.pop('max_fdist', None)
+    prom_thresh = matching_kwargs.pop('prom_thresh', None)
+    algorithm = matching_kwargs.pop('algorithm', 'auto')
+    n_jobs = matching_kwargs.pop('n_jobs', 1)
+
+    if idxs_moving.size == 1:
+        # one nearby point, don't filter on prominence for 1-member neighborhoods
+        feats_moving_nearby = feats_moving[idxs_moving].reshape(-1, 1)
+    else:
+        # two or more nearby points, can filter by prominence
+        feats_moving_nearby = feats_moving[idxs_moving]
+
+    _, idxs_moving = feature_matching(feat_fixed,
+                                      feats_moving_nearby,
+                                      max_fdist=max_fdist,
+                                      prom_thresh=prom_thresh,
+                                      algorithm=algorithm,
+                                      n_jobs=n_jobs)
+
+    # we need to return a global index of a moving point
+    if idxs_moving.size == 0:  # no matches found
+        match = None
+    else:  # found a match
+        match = idxs_moving[0]  # index of the nearest / best match
+    return match
 
 
-def neighborhood_init(external_spatial_kdtree, external_feat_moving):
+spatial_nbrs_moving = None
+feats_moving = None
+
+
+def _radius_matching(input_dict):
+    """Wrapper for `radius_matching` with a single input dictionary argument. Used with multiprocessing
+
+    Parameters
+    ----------
+    input_dict : dict
+        A dictionary with arguments to pass to `radius_matching`. Default values will be used if not provided
+
+    Returns
+    -------
+    match : int or None
+        index of moving match or None if no match was found
+
+    """
+    global spatial_nbrs_moving
+    global feats_moving
+    point_fixed = input_dict.pop('point_fixed')
+    feat_fixed = input_dict.pop('feat_fixed').reshape(-1, 1)
+    matching_kwargs = input_dict.pop('matching_kwargs', None)
+    match = radius_matching(point_fixed, feat_fixed, spatial_nbrs_moving, feats_moving, matching_kwargs)
+    return match
+
+
+def _worker_init(external_spatial_kdtree, external_feats_moving):
     """Initialize workers that perform neighborhood matching
 
     Parameters
     ----------
     external_spatial_kdtree : NearestNeighbor
-        a NearestNeighbor kdtree fit on moving pts
-    external_feat_moving : array
-        (N, 6) array of the moving point features
+        a NearestNeighbor object fit on moving pts
+    external_feats_moving : ndarray
+        (M, F) array of F features for M moving points
 
     """
     global spatial_kdtree
-    global feat_moving
+    global feats_moving
     spatial_kdtree = external_spatial_kdtree
-    feat_moving = external_feat_moving
+    feats_moving = external_feats_moving
 
 
-def neighborhood_matching(args):
-    """Search for a matching moving point within a radius neighborhood
-
-    Parameters
-    ----------
-    args : tuple
-        A tuple containing a fixed point and its features
-
-    Returns
-    -------
-    result : None or array
-        position of the found moving point match. None if no match is found.
-
-    """
-    pt_stationary, pt_stationary_feat, prominence_thresh, max_feat_dist = args
-
-    # spatial_kdtree is copied to the global scope of each subprocess
-    nbrhoods = spatial_kdtree.radius_neighbors(pt_stationary.reshape(1, -1), return_distance=False)
-    nbrhood = nbrhoods[0]  # nbrhoods is a list of arrays (jagged)
-
-    pts_moving_feat = feat_moving[nbrhood]
-
-    if len(nbrhood) > 1:
-        feat_distances = cdist(pt_stationary_feat.reshape(1, -1), pts_moving_feat)[0]
-        nearest_two = np.argsort(feat_distances)[:2]
-        prominence = feat_distances[nearest_two[0]] / (1e-9 + feat_distances[nearest_two[1]])
-        if prominence < prominence_thresh and feat_distances[nearest_two[0]] < max_feat_dist:
-            return nbrhood[nearest_two[0]]
-
-
-def match_pts(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat_dist, prominence_thresh, max_distance, nb_workers):
+def match_pts(points_fixed, points_moving, feats_fixed, feats_moving, radius, nb_workers, chunks, matching_kwargs):
     """Find matching moving points with a radius neighborhood of fixed points
 
     Parameters
     ----------
-    pts_stationary : array
+    points_fixed : array
         array (N, 3) of fixed points
-    pts_moving : array
+    points_moving : array
         array (M, 3) of moving points
-    feat_stationary : array
+    feats_fixed : array
         array (N, 6) of fixed point features
-    feat_moving : array
+    feats_moving : array
         array (M, 6) of moving point features
-    max_feat_dist : float
-        float of the maximum allowed feature-space distance
-    prominence_thresh : float
-        float of the maximum allowed prominence factor
-    max_distance : float
-        float of the neighborhood search radius
+    radius : float
+        maximum distance to search for matches
     nb_workers : int
         number of processes to search for matches in parallel
+    chunks : int
+        number of points each worker processes at a time
+    matching_kwargs : dict, optional
+        keyword arguments to pass to `feature_matching` for filtering the candidate matches.
 
     Returns
     -------
@@ -356,67 +433,27 @@ def match_pts(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat
         indices of found matches in the moving image
 
     """
-    print('building kd-tree')
-    spatial_nbrs = NearestNeighbors(radius=max_distance, algorithm='kd_tree', n_jobs=-1).fit(pts_moving)
 
-    # Building the kd-tree is fast, but the radius neighbors cannot be held in memory
-    # The radius neighbors should be part of the neighboorhood matching within subprocesses
+    prom_thresh = matching_kwargs.pop('prom_thresh', None)
+    max_fdist = matching_kwargs.pop('max_fdist', None)
 
-    print('building arguments list')
+    spatial_nbrs = build_neighbors(points_moving, n_neighbors=2, radius=radius, n_jobs=-1)
+
     args = []
-    for i, pt_stationary in tqdm.tqdm(enumerate(pts_stationary), total=len(pts_stationary)):
-        args.append((pt_stationary, feat_stationary[i], prominence_thresh, max_feat_dist))
+    for i, point_fixed in tqdm.tqdm(enumerate(points_fixed), total=len(points_fixed)):
+        input_dict = {
+            'point_fixed': point_fixed,
+            'feat_fixed': feats_fixed[i],
+            'prom_thresh': prom_thresh,
+            'max_fdist': max_fdist
+        }
+        args.append(input_dict)
 
-    print('finding neighborhood matches')
-    with multiprocessing.Pool(processes=nb_workers, initializer=neighborhood_init, initargs=(spatial_nbrs, feat_moving)) as pool:
-        results = list(tqdm.tqdm(pool.imap(neighborhood_matching, args, chunksize=10), total=len(pts_stationary)))
+    with multiprocessing.Pool(processes=nb_workers, initializer=_worker_init, initargs=(spatial_nbrs, feats_moving)) as pool:
+        results = list(tqdm.tqdm(pool.imap(_radius_matching, args, chunksize=chunks), total=len(points_fixed)))
 
     stationary_matches = [i for i, j in enumerate(results) if j is not None]
     moving_matches = [j for j in results if j is not None]
-    print('Found {} matches.'.format(len(moving_matches)))
-
-    return stationary_matches, moving_matches
-
-
-def match_pts_global(pts_stationary, pts_moving, feat_stationary, feat_moving, max_feat_dist, prominence_thresh, max_distance, nb_workers):
-    """Find matching moving points globally (without neighborhood search)
-
-    Parameters
-    ----------
-    pts_stationary : array
-        array (N, 3) of fixed points
-    pts_moving : array
-        array (M, 3) of moving points
-    feat_stationary : array
-        array (N, 6) of fixed point features
-    feat_moving : array
-        array (M, 6) of moving point features
-    max_feat_dist : float
-        float of the maximum allowed feature-space distance
-    prominence_thresh : float
-        float of the maximum allowed prominence factor
-    max_distance : float
-        float of the neighborhood search radius
-    nb_workers : int
-        number of processes to search for matches in parallel
-
-    Returns
-    -------
-    stationary_matches : array
-        indices of found matches in the stationary image
-    moving_matches : array
-        indices of found matches in the moving image
-
-    """
-    moving_nbrs = NearestNeighbors(n_neighbors=2, algorithm='kd_tree', n_jobs=-1).fit(feat_moving)
-    distances, indices = moving_nbrs.kneighbors(feat_stationary)
-    stationary_matches = []
-    moving_matches = []
-    for i, (idxs, dists) in enumerate(zip(indices, distances)):
-        prominence = dists[0] / (1e-9 + dists[1])
-        if prominence < prominence_thresh and dists[0] < max_feat_dist:
-            stationary_matches.append(i)
-            moving_matches.append(idxs[0])
     return stationary_matches, moving_matches
 
 
@@ -497,6 +534,9 @@ def register_pts(pts, linear_model):
     return unflatten(linear_model.predict(augmented_matrix(pts)))
 
 
+# Old code
+
+
 def average_residual(pts1, pts2):
     return np.linalg.norm(pts1-pts2, axis=-1).mean()
 
@@ -511,15 +551,36 @@ def generate_3d_image(size, center, sigma):
 
 
 def coord_mapping(fixed_coords, c, matches_stationary, smoothing):
+    """Apply 3D thin-plate spline mapping to fixed_coords.
+
+    The RBF keypoints are given in matches_stationary. Smoothing is a
+    surface energy regularization parameter.
+
+    Parameters
+    ----------
+    fixed_coords : ndarray
+        (N, 3) array of points to warp
+    c : ndarray
+        (M, 3) array of spline coefficients for z, y, and x axes
+    matches_stationary : ndarray
+        (M, 3) array of keypoint coordinates
+    smoothing : float
+        surface energy regularization parameter
+
+
+    Returns
+    -------
+    moving_coords : ndarray
+        (N, 3) array of warped points
+
+    """
     nb_pts = fixed_coords.shape[0]
-    # fixed_coords = np.reshape(fixed_coords, (1, *fixed_coords.shape))
     dist = scipy.spatial.distance.cdist(fixed_coords, matches_stationary)
     nb_matches = matches_stationary.shape[0]
     T = np.zeros((nb_pts, 4+nb_matches))
-    T[:,:4] = np.hstack([np.ones((nb_pts,1)), fixed_coords])
-    T[:,4:] = dist + nb_matches*smoothing
+    T[:, :4] = np.hstack([np.ones((nb_pts,1)), fixed_coords])
+    T[:, 4:] = dist + nb_matches*smoothing
     moving_coords = T.dot(c)
-    # moving_coords = np.reshape(moving_coords, (1, *moving_coords.shape))
     return moving_coords
 
 

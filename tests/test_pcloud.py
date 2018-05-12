@@ -126,17 +126,6 @@ class TestGeometricFeatures(unittest.TestCase):
             self.assertTrue(np.allclose(features_1, features_n))
 
 
-class TestFindSimilar(unittest.TestCase):
-    def test(self):
-        feat_stationary = np.array([[1, 2, 3]])
-        feat_moving = np.array([[1, 4, 3],
-                                [2, 2, 3],
-                                [1, 2, 6]])
-        dist, idx = pcloud.find_similar(feat_stationary, feat_moving)
-        self.assertEqual(idx[0, 0], 1)
-        self.assertAlmostEqual(dist[0, 0], 1)
-
-
 class TestCheckDistance(unittest.TestCase):
     def test_simple3d(self):
         dists = np.array([1, 2, 3, 0])
@@ -148,8 +137,8 @@ class TestCheckDistance(unittest.TestCase):
                     None]
         for max_dist, true in zip(max_dists, true_idx):
             close = pcloud.check_distance(dists, max_dist)
-            if close is None:
-                self.assertEqual(close, true)
+            if true is None:
+                self.assertEqual(close[0].size, 0)
             else:
                 self.assertTrue(np.allclose(close[0], np.asarray(true)))
 
@@ -180,13 +169,13 @@ class TestCheckProminence(unittest.TestCase):
                     None]
         for threshold, true in zip(thresholds, true_idx):
             close = pcloud.check_prominence(prom, threshold)
-            if close is None:
-                self.assertEqual(close, true)
+            if true is None:
+                self.assertEqual(close[0].size, 0)
             else:
                 self.assertTrue(np.allclose(close[0], np.asarray(true)))
 
 
-class TestGlobalMatching(unittest.TestCase):
+class TestFeatureMatching(unittest.TestCase):
 
     def setUp(self):
         self.points_fixed = np.array([[0, 0, 0],
@@ -206,46 +195,67 @@ class TestGlobalMatching(unittest.TestCase):
         self.feat_moving_noise = pcloud.geometric_features(self.points_moving_noise, nb_workers=1)
 
     def test_exact(self):
-        idx_fixed, idx_moving = pcloud.global_matching(self.feat_fixed, self.feat_moving)
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed, self.feat_moving)
         self.assertTrue(np.all(idx_fixed == np.array([0, 1, 2, 3])))
         self.assertTrue(np.all(idx_moving == np.array([1, 0, 3, 2])))
 
     def test_noisy(self):
-
-        idx_fixed, idx_moving = pcloud.global_matching(self.feat_fixed, self.feat_moving_noise)
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed, self.feat_moving_noise)
         self.assertTrue(np.all(idx_fixed == np.array([0, 1, 2, 3])))
         self.assertTrue(np.all(idx_moving == np.array([1, 0, 3, 2])))
 
     def test_max_fdist(self):
-        idx_fixed, idx_moving = pcloud.global_matching(self.feat_fixed,
-                                                       self.feat_moving_noise,
-                                                       max_fdist=0.6)
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed,
+                                                        self.feat_moving_noise,
+                                                        max_fdist=0.6)
         self.assertTrue(np.all(idx_fixed == np.array([0, 1])))
         self.assertTrue(np.all(idx_moving == np.array([1, 0])))
 
-        idx_fixed, idx_moving = pcloud.global_matching(self.feat_fixed,
-                                                       self.feat_moving_noise,
-                                                       max_fdist=0.5)
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed,
+                                                        self.feat_moving_noise,
+                                                        max_fdist=0.5)
         self.assertTrue(np.all(idx_fixed == np.array([0])))
         self.assertTrue(np.all(idx_moving == np.array([1])))
     
     def test_prom_thresh(self):
         # prominences = [0.339, 0.4517, 0.400, 0.3742]
-        idx_fixed, idx_moving = pcloud.global_matching(self.feat_fixed,
-                                                       self.feat_moving_noise,
-                                                       prom_thresh=0.41)
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed,
+                                                        self.feat_moving_noise,
+                                                        prom_thresh=0.41)
         self.assertTrue(np.all(idx_fixed == np.array([0, 2, 3])))
         self.assertTrue(np.all(idx_moving == np.array([1, 3, 2])))
 
     def test_both_filters(self):
-        idx_fixed, idx_moving = pcloud.global_matching(self.feat_fixed,
-                                                       self.feat_moving_noise,
-                                                       max_fdist=0.6,
-                                                       prom_thresh=0.41)
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed,
+                                                        self.feat_moving_noise,
+                                                        max_fdist=0.6,
+                                                        prom_thresh=0.41)
         self.assertTrue(np.all(idx_fixed == np.array([0])))
         self.assertTrue(np.all(idx_moving == np.array([1])))
 
+    def test_none(self):
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed,
+                                                        self.feat_moving_noise,
+                                                        max_fdist=0.1)
+        self.assertEqual(idx_fixed.size, 0)
+        self.assertEqual(idx_moving.size, 0)
 
-class TestNeighborhoodMatching(unittest.TestCase):
-    def test(self):
-        pass
+    def test_single_candidate(self):
+        feat_moving = np.array([[1, 0, 0, 0, 0, 0]])
+        # Should not filter out based on prominence, only on by fdist
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed,
+                                                        feat_moving,
+                                                        prom_thresh=0.01,
+                                                        max_fdist=100)
+        self.assertTrue(np.all(idx_moving == np.array([0])))
+        idx_fixed, idx_moving = pcloud.feature_matching(self.feat_fixed,
+                                                        feat_moving,
+                                                        prom_thresh=0.01,
+                                                        max_fdist=0.01)
+        self.assertTrue(np.all(idx_moving == np.array([])))
+
+
+
+
+
+

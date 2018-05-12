@@ -410,33 +410,6 @@ def interpolate(image, coordinates, order=3):
     return output
 
 
-def rotation_matrix(thetas):
-    """Create a 3D rotation matrix given rotations about each axis
-
-    Parameters
-    ----------
-    thetas : array-like
-        array-like with 3 rotation angles in radians
-
-    """
-    rz = np.eye(3)
-    rz[1, 1] = np.cos(thetas[0])
-    rz[2, 2] = np.cos(thetas[0])
-    rz[1, 2] = -np.sin(thetas[0])
-    rz[2, 1] = np.sin(thetas[0])
-    ry = np.eye(3)
-    ry[0, 0] = np.cos(thetas[1])
-    ry[2, 2] = np.cos(thetas[1])
-    ry[0, 2] = np.sin(thetas[1])
-    ry[2, 0] = -np.sin(thetas[1])
-    rx = np.eye(3)
-    rx[0, 0] = np.cos(thetas[2])
-    rx[1, 1] = np.cos(thetas[2])
-    rx[0, 1] = -np.sin(thetas[2])
-    rx[1, 0] = np.sin(thetas[2])
-    return rz.dot(ry).dot(rx)
-
-
 def ncc(fixed, registered):
     """Calculate the normalized cross-correlation between two images
 
@@ -667,6 +640,7 @@ def pcloud_hist(pts, dimensions, bin_size):
     density, edges = np.histogramdd(pts, bins=bins, range=density_range.T)
 
     return density
+
 
 def main():
     # Input images
