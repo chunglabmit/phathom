@@ -106,6 +106,9 @@ def eigvalsh(A):
     return np.linalg.eigvalsh(A)
 
 
+def eigvals_of_weingarten(g):
+    return eigvalsh(weingarten(g))
+
 def convex_seeds(eigvals):
     eig_neg = np.clip(eigvals, None, 0)
     det_neg = eig_neg.prod(axis=-1)
@@ -358,6 +361,16 @@ def main():
     centroids = find_centroids(labeled_seg)
     np.save(file=centroids_file, arr=centroids)
 
+#
+# Monkey-patch eigvals_of_weingarten if PyTorch is available.
+#
+try:
+    import torch
+    if torch.cuda.is_available():
+        cpu_eigvals_of_weingarten = eigvals_of_weingarten
+        from .torch_impl import eigvals_of_weingarten
+except:
+    pass
 
 if __name__ == '__main__':
     main()
