@@ -13,9 +13,6 @@ import os.path
 import shutil
 
 
-# Set default colormap to grayscale
-plt.gray()
-
 # Set consistent numpy random state
 np.random.seed(123)
 
