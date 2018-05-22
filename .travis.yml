@@ -12,6 +12,7 @@ install:
    - pip install -r requirements.txt
    - pip install --editable .
    - pip install nose
+   - pip install torch
 script:
    - nosetests tests
    - PHATHOM_MAPPER=MpiScatter PHATHOM_NODES=10 nosetests tests
