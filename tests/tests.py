@@ -2,11 +2,12 @@ import phathom
 import phathom.io
 import phathom.utils
 from phathom.test_helpers import *
+import multiprocessing
 import numpy as np
 import unittest
 import os
 import tempfile
-
+import sys
 
 class TestConversion(unittest.TestCase):
 
@@ -62,6 +63,39 @@ class TestUtils(unittest.TestCase):
         read_dict = phathom.utils.pickle_load(tmp_file)
         self.assertEqual(read_dict, true_dict, msg='saved and read dict do not match')
         os.remove(tmp_file)  # cleanup
+
+    @staticmethod
+    def write_for_memory_tteesstt(expected):
+        global memory
+
+        with memory.txn() as t:
+            t[:] = expected
+
+    @staticmethod
+    def do_memory_tteesstt():
+        global memory
+        memory = phathom.utils.SharedMemory(100, np.uint32)
+        expected = np.random.RandomState(1234).randint(0, 100, 100)
+
+        with multiprocessing.Pool(1) as pool:
+                pool.apply(TestUtils.write_for_memory_tteesstt, (expected,))
+        with memory.txn() as t:
+            np.testing.assert_equal(t[:], expected)
+
+    def test_shared_memory(self):
+        old_is_linux = phathom.utils.is_linux
+        if sys.platform.startswith("linux"):
+            # Test the generic form of SharedMemory
+            phathom.utils.is_linux = False
+        try:
+            self.do_memory_tteesstt()
+        finally:
+            phathom.utils.is_linux = old_is_linux
+
+    if sys.platform.startswith("linux"):
+        def test_linux_shared_memory(self):
+            self.do_memory_tteesstt()
+
 
     # def test_parallel_map(self):
     #     result = find_primes(5 * 1000 * 1000 * 1000, 5*1000*1000*1000 + 1000)
