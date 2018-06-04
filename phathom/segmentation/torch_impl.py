@@ -3,6 +3,7 @@
 
 """
 
+import logging
 import itertools
 import numpy as np
 import torch
@@ -267,49 +268,69 @@ def eigvals_of_weingarten(x, ew_block_size=200):
     result = np.zeros((x.shape[0], x.shape[1], x.shape[2], 3), x.dtype)
     a = [None, None]
     e = [None, None]
+    try:
+        #
+        # Create a pipeline of operations where the GPU operation is interleaved
+        # with the transfer of the last result to CPU memory and the transfer of
+        # the next block of memory to the GPU.
+        #
+        def do_copy_to_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx):
+            logging.debug("Starting copy to GPU: %d:%d, %d:%d, %d:%d idx=%d" %
+                          (x0a, x1a, y0a, y1a, z0a, z1a, idx))
+            a[idx] = torch.from_numpy(
+                xpad[z0a:z1a + 4, y0a:y1a + 4, x0a:x1a + 4]).cuda()
+            logging.debug("Finished copy to GPU: %d:%d, %d:%d, %d:%d idx=%d" %
+                          (x0a, x1a, y0a, y1a, z0a, z1a, idx))
 
-    #
-    # Create a pipeline of operations where the GPU operation is interleaved
-    # with the transfer of the last result to CPU memory and the transfer of
-    # the next block of memory to the GPU.
-    #
-    def do_copy_to_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx):
-        a[idx] = torch.from_numpy(xpad[z0a:z1a + 4, y0a:y1a + 4, x0a:x1a + 4])\
-                      .cuda()
+        def do_eigenvalues_of_weingarten(idx):
+            logging.debug("Starting eigenvalues of weingarten, idx=%d" % idx)
+            e[idx] = eigen3(weingarten(a[idx]))
+            logging.debug("Finished eigenvalues of weingarten, idx=%d" % idx)
 
-    def do_eigenvalues_of_weingarten(idx):
-        e[idx] = eigen3(weingarten(a[idx]))
+        def do_copy_from_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx):
+            logging.debug("Starting copy from GPU: %d:%d, %d:%d, %d:%d idx=%d" %
+                          (x0a, x1a, y0a, y1a, z0a, z1a, idx))
+            e1, e2, e3 = e[idx]
+            result[z0a:z1a, y0a:y1a, x0a:x1a, 0] = e1.cpu().numpy()
+            result[z0a:z1a, y0a:y1a, x0a:x1a, 1] = e2.cpu().numpy()
+            result[z0a:z1a, y0a:y1a, x0a:x1a, 2] = e3.cpu().numpy()
+            logging.debug("Finished copy from GPU: %d:%d, %d:%d, %d:%d idx=%d" %
+                          (x0a, x1a, y0a, y1a, z0a, z1a, idx))
 
-    def do_copy_from_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx):
-        e1, e2, e3 = e[idx]
-        result[z0a:z1a, y0a:y1a, x0a:x1a, 0] = e1.cpu().numpy()
-        result[z0a:z1a, y0a:y1a, x0a:x1a, 1] = e2.cpu().numpy()
-        result[z0a:z1a, y0a:y1a, x0a:x1a, 2] = e3.cpu().numpy()
+        to_gpu = []
+        eow = []
+        from_gpu = []
+        idx = 0
+        for (x0a, x1a), (y0a, y1a), (z0a, z1a) in itertools.product(
+            zip(x0, x1), zip(y0, y1), zip(z0, z1)):
+            to_gpu.append(
+                lambda x0a=x0a, x1a=x1a, y0a=y0a, y1a=y1a, z0a=z0a, z1a=z1a,
+                       idx=idx:
+                       do_copy_to_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx))
+            eow.append(lambda idx=idx: do_eigenvalues_of_weingarten(idx))
+            from_gpu.append(
+                lambda x0a=x0a, x1a=x1a, y0a=y0a, y1a=y1a, z0a=z0a, z1a=z1a,
+                       idx=idx:
+                       do_copy_from_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx))
+            idx = 1 - idx
 
-    to_gpu = []
-    eow = []
-    from_gpu = []
-    idx = 0
-    for (x0a, x1a), (y0a, y1a), (z0a, z1a) in itertools.product(
-        zip(x0, x1), zip(y0, y1), zip(z0, z1)):
-        to_gpu.append(
-            lambda x0a=x0a, x1a=x1a, y0a=y0a, y1a=y1a, z0a=z0a, z1a=z1a,
-                   idx=idx: do_copy_to_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx))
-        eow.append(lambda idx=idx: do_eigenvalues_of_weingarten(idx))
-        from_gpu.append(
-            lambda x0a=x0a, x1a=x1a, y0a=y0a, y1a=y1a, z0a=z0a, z1a=z1a,
-                   idx=idx: do_copy_from_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx))
-        idx = 1 - idx
+        operations = [to_gpu[0], eow[0]] + \
+                      sum(map(list,
+                              zip(to_gpu[1:], eow[1:], from_gpu[:-1])), []) +\
+                     [from_gpu[-1]]
+        [_() for _ in operations]
+    finally:
+        logging.debug("Deleting intermediate variables")
+        del a
+        del e
+        del to_gpu
+        del eow
+        del from_gpu
+        del operations
 
-    operations = [to_gpu[0], eow[0]] + \
-                  sum(map(list, zip(to_gpu[1:], eow[1:], from_gpu[:-1])), []) +\
-                 [eow[-1]]
-    [_() for _ in operations]
-
-    del a
-    del e
-
-    torch.cuda.empty_cache()
+        logging.debug("Emptying CUDA cache")
+        torch.cuda.empty_cache()
+    logging.debug("Finishing eigvals_of_weingarten")
     return result
 
 
