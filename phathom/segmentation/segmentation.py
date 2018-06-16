@@ -13,9 +13,6 @@ import os.path
 import shutil
 
 
-# Set default colormap to grayscale
-plt.gray()
-
 # Set consistent numpy random state
 np.random.seed(123)
 
@@ -105,6 +102,9 @@ def weingarten(g):
 def eigvalsh(A):
     return np.linalg.eigvalsh(A)
 
+
+def eigvals_of_weingarten(g):
+    return eigvalsh(weingarten(g))
 
 def convex_seeds(eigvals):
     eig_neg = np.clip(eigvals, None, 0)
@@ -358,6 +358,16 @@ def main():
     centroids = find_centroids(labeled_seg)
     np.save(file=centroids_file, arr=centroids)
 
+#
+# Monkey-patch eigvals_of_weingarten if PyTorch is available.
+#
+try:
+    import torch
+    if torch.cuda.is_available():
+        cpu_eigvals_of_weingarten = eigvals_of_weingarten
+        from .torch_impl import eigvals_of_weingarten
+except:
+    pass
 
 if __name__ == '__main__':
     main()
