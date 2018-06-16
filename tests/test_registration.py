@@ -29,5 +29,6 @@ class TestRegistration(unittest.TestCase):
         self.assertAlmostEqual(blobs[0, 1], 11, 1)
         self.assertAlmostEqual(blobs[0, 2], 10, 1)
 
+
 if __name__ == '__main__':
     unittest.main()

@@ -255,7 +255,64 @@ class TestFeatureMatching(unittest.TestCase):
         self.assertTrue(np.all(idx_moving == np.array([])))
 
 
+class TestRadiusMatching(unittest.TestCase):
 
+    def setUp(self):
+        self.points_fixed = np.array([[0, 0, 0],
+                                      [1, 0, 0],
+                                      [0, 0, 3],
+                                      [0, 2, 0]])
+        self.points_moving = np.array([[11, 0, 0],
+                                       [10, 0, 0],
+                                       [10, 2, 0],
+                                       [10, 0, 3]])  # translated by [10, 0, 0]
+        self.points_moving_noise = np.array([[11, 0, 0],
+                                             [10.2, 0, 0],
+                                             [10.2, 2, 0],
+                                             [10, 0, 3]])  # translated by [10+e, 0, 0]
+        self.feat_fixed = pcloud.geometric_features(self.points_fixed, nb_workers=2)
+        self.feat_moving = pcloud.geometric_features(self.points_moving, nb_workers=2)
+        self.feat_moving_noise = pcloud.geometric_features(self.points_moving_noise, nb_workers=2)
 
+    def test_no_neighbors(self):
+        radius = 5
+        matching_kwargs = {'max_fdist': 10,
+                           'prom_thresh': 0.5}
+        idx_fixed, idx_moving = pcloud.radius_matching(self.points_fixed,
+                                                       self.points_moving,
+                                                       self.feat_fixed,
+                                                       self.feat_moving,
+                                                       radius=radius,
+                                                       nb_workers=2,
+                                                       matching_kwargs=matching_kwargs)
+        self.assertEqual(idx_fixed.size, 0)
+        self.assertEqual(idx_moving.size, 0)
 
+    def test_all_neighbors(self):
+        radius = 15
+        matching_kwargs = {'max_fdist': 10,
+                           'prom_thresh': 0.5}
+        idx_fixed, idx_moving = pcloud.radius_matching(self.points_fixed,
+                                                       self.points_moving,
+                                                       self.feat_fixed,
+                                                       self.feat_moving,
+                                                       radius=radius,
+                                                       nb_workers=2,
+                                                       matching_kwargs=matching_kwargs)
+        self.assertTrue(np.all(idx_fixed == np.array([0, 1, 2, 3])))
+        self.assertTrue(np.all(idx_moving == np.array([1, 0, 3, 2])))
+
+    def test_some_neighbors(self):
+        radius = 10
+        matching_kwargs = {'max_fdist': 10,
+                           'prom_thresh': 0.5}
+        idx_fixed, idx_moving = pcloud.radius_matching(self.points_fixed,
+                                                       self.points_moving_noise,
+                                                       self.feat_fixed,
+                                                       self.feat_moving_noise,
+                                                       radius=radius,
+                                                       nb_workers=2,
+                                                       matching_kwargs=matching_kwargs)
+        self.assertTrue(np.all(idx_fixed == np.array([1, 2])))
+        self.assertTrue(np.all(idx_moving == np.array([0, 3])))
 

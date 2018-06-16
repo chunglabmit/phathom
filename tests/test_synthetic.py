@@ -115,6 +115,5 @@ class TestRemoveRandomPoints(unittest.TestCase):
             self.assertTrue(np.all(np.isin(s, p)))
 
 
-
 if __name__ == '__main__':
     unittest.main()

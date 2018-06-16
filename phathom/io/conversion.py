@@ -18,7 +18,6 @@ rechunk_zarr - copy a zarr array with new parameters
 from phathom import utils
 from phathom import io
 import skimage.external.tifffile as tifffile
-from skimage.transform import downscale_local_mean
 import zarr
 from numcodecs import Blosc
 import numpy as np
@@ -40,7 +39,7 @@ def tifs_to_zarr_chunks(z_arr, tif_paths, start_list):
         args.append((chunk, z_arr, start))
 
     with multiprocessing.Pool(16) as pool:
-        pool.starmap(io.zarr.write_chunk, args) # write tiffs in parallel
+        pool.starmap(io.zarr.write_subarray, args)  # write tiffs in parallel
 
 
 def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False):
@@ -230,88 +229,6 @@ def ims_to_zarr(ims_path, zarr_path, chunks, nb_workers):
 
         # Save chunks in parallel
         pool.starmap(ims_chunk_to_zarr, args)
-
-# TODO: move downsample code to utils or preprocessing
-
-
-def downsample_chunk(args):
-    """ Downsample a zarr array chunk and write it to another zarr array as a smaller chunk
-
-    :param z_arr_in: input zarr array
-    :param z_arr_out: ouput zarr array
-    :param chunk_idx: array-like of chunk indices
-    :param factors: array-like of float downsampling factors
-    :return:
-    """""
-    z_arr_in, z_arr_out, chunk_idx, factors = args
-
-    in_start = np.array([i*c for i, c in zip(chunk_idx, z_arr_in.chunks)])
-    in_stop = np.array([(i+1)*c if (i+1)*c < s else s for i, c, s in zip(chunk_idx, z_arr_in.chunks, z_arr_in.shape)])
-
-    data = z_arr_in[in_start[0]:in_stop[0], in_start[1]:in_stop[1], in_start[2]:in_stop[2]]
-
-    down_data = downscale_local_mean(image=data, factors=factors)
-
-    out_start = np.array([i*c for i, c in zip(chunk_idx, z_arr_out.chunks)])
-    out_stop = np.array([(i+1)*c if (i+1)*c < s else s for i, c, s in zip(chunk_idx, z_arr_out.chunks, z_arr_out.shape)])
-
-    z_arr_out[out_start[0]:out_stop[0], out_start[1]:out_stop[1], out_start[2]:out_stop[2]] = down_data
-
-
-def downsample_zarr(z_arr_in, factors, output_path, nb_workers=1, **kwargs):
-    """ Downsample a chunked zarr array in parallel
-
-    :param z_arr_in: input zarr array
-    :param factors: tuple of floats with downsample factors
-    :param output_path: path for the output zarr array
-    :param kwargs: additional keyword arguments passed to zarr.open()
-    :param nb_workers: number of workers to downsample in parallel
-    :return:
-    """
-
-    if kwargs.pop('chunks', None) is not None:
-        raise ValueError('chunks will be determined by the downsampling factors')
-
-    if z_arr_in.chunks is None:
-        raise ValueError('input zarr array must contain chunks')
-
-    shape = np.array([np.ceil(s/f) for s, f in zip(z_arr_in.shape, factors)])
-    chunks = np.array([int(i/f) for i, f in zip(z_arr_in.chunks, factors)])
-
-    z_arr_out = zarr.open(output_path, mode='w', shape=shape, chunks=chunks, dtype=z_arr_in.dtype, **kwargs)
-    nb_chunks = utils.chunk_dims(z_arr_in.shape, z_arr_in.chunks)
-
-    args = []
-    for chunk_idx in product(*tuple(range(n) for n in nb_chunks)):
-        args.append((z_arr_in, z_arr_out, chunk_idx, factors))
-
-    with multiprocessing.Pool(processes=nb_workers) as pool:
-        list(tqdm.tqdm(pool.imap(downsample_chunk, args), total=len(args)))
-
-# TODO: this can probably also use io.zarr.write_chunk
-def fetch_and_write_chunk(source, dest, dest_chunk_idx):
-    start = np.array(dest_chunk_idx) * np.array(dest.chunks)
-    stop = np.array([(i+1)*c if (i+1)*c <= s else s for i, c, s in zip(dest_chunk_idx, dest.chunks, dest.shape)])
-    data = source[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]]
-    write_chunk(data, dest, start)
-
-
-def rechunk_zarr(source, dest, nb_workers):
-    """ Copy a chunked zarr array to a new zarr array with different parameters
-
-    :param source: source zarr array
-    :param dest: destination zarr array
-    :param nb_workers: number of workers to write in parallel
-    :return:
-    """
-    nb_chunks = utils.chunk_dims(dest.shape, dest.chunks)
-
-    args = []
-    for chunk_idx in product(*tuple(range(n) for n in nb_chunks)):
-        args.append((source, dest, chunk_idx))
-
-    with multiprocessing.Pool(nb_workers) as pool:
-        pool.starmap(fetch_and_write_chunk, args)
 
 
 def main():

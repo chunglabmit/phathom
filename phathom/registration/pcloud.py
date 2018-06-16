@@ -1,3 +1,5 @@
+"""The pcloud module contains functions related to point cloud generation and matching
+"""
 import numpy as np
 import scipy
 from scipy.spatial.distance import cdist
@@ -238,7 +240,7 @@ def build_neighbors(X, n_neighbors=1, radius=1.0, algorithm='auto', n_jobs=1):
     return nbrs.fit(X)
 
 
-def feature_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None, algorithm='auto', n_jobs=1):
+def feature_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None, algorithm='auto', n_jobs=-1):
     """Find moving point matches for all fixed points based on feature distance and prominence
 
     Parameters
@@ -254,7 +256,7 @@ def feature_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None, 
     algorithm : {'auto', 'ball_tree', 'kd_tree', 'brute'}, optional
         algorithm used to compute the nearest neighbors
     n_jobs : int, optional
-        number of parallel jobs to use for kneighbors query. -1 defaults to the number of CPU cores
+        number of parallel processes to use for kneighbors queries. Default uses the number of CPU cores
 
     Returns
     -------
@@ -264,6 +266,8 @@ def feature_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None, 
         indices of moving point matches. Empty if no matches are found
 
     """
+    if feat_fixed.ndim == 1:
+        feat_fixed = feat_fixed.reshape(-1, 1)
     try:
         if feat_fixed.ndim != 2:
             raise ValueError('feat_fixed is not two-dimensional')
@@ -303,158 +307,139 @@ def feature_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None, 
     return idx_fixed, idxs_moving[:, 0]
 
 
-def radius_matching(point_fixed, feat_fixed, spatial_nbrs_moving, feats_moving, matching_kwargs=None):
-    """Search radius neighborhood in `spatial_nbrs_moving` for a match of `point_fixed`
-
-    Parameters
-    ----------
-    point_fixed : ndarray
-        (D,) array of the D spatial coordinates of the fixed point
-    feat_fixed : ndarray
-        (F,) array of the F features of the fixed point
-    spatial_nbrs_moving : NearestNeighbors
-        trained NearestNeighbors object to efficiently query nearby moving points
-    feats_moving : ndarray
-        (M, F) array of F features for all M moving points
-    matching_kwargs : dict, optional
-        keyword arguments to pass to `feature_matching` for filtering the candidate matches. Default is None,
-        which will not filter the matches and use a single worker.
-
-    Returns
-    -------
-    match : int or None
-        if a match is found in the moving points, then it's index is returned. Otherwise, None.
-
-    """
-    idxs_moving = spatial_nbrs_moving.radius_neighbors(point_fixed, return_distance=False)
-
-    if idxs_moving.size == 0:
-        # no nearby points, don't bother
-        return None
-
-    max_fdist = matching_kwargs.pop('max_fdist', None)
-    prom_thresh = matching_kwargs.pop('prom_thresh', None)
-    algorithm = matching_kwargs.pop('algorithm', 'auto')
-    n_jobs = matching_kwargs.pop('n_jobs', 1)
-
-    if idxs_moving.size == 1:
-        # one nearby point, don't filter on prominence for 1-member neighborhoods
-        feats_moving_nearby = feats_moving[idxs_moving].reshape(-1, 1)
+def _feature_matching(input_zip):
+    feat_fixed, feat_moving, matching_kwargs = input_zip
+    feat_fixed = feat_fixed.reshape(1, -1)
+    if feat_moving.shape[0] > 0:
+        max_fdist = matching_kwargs.pop('max_fdist', None)
+        prom_thresh = matching_kwargs.pop('prom_thresh', None)
+        algorithm = matching_kwargs.pop('algorithm', 'auto')
+        n_jobs = matching_kwargs.pop('n_jobs', 1)
+        matches = feature_matching(feat_fixed, feat_moving,
+                                   max_fdist=max_fdist,
+                                   prom_thresh=prom_thresh,
+                                   algorithm=algorithm,
+                                   n_jobs=n_jobs)
     else:
-        # two or more nearby points, can filter by prominence
-        feats_moving_nearby = feats_moving[idxs_moving]
-
-    _, idxs_moving = feature_matching(feat_fixed,
-                                      feats_moving_nearby,
-                                      max_fdist=max_fdist,
-                                      prom_thresh=prom_thresh,
-                                      algorithm=algorithm,
-                                      n_jobs=n_jobs)
-
-    # we need to return a global index of a moving point
-    if idxs_moving.size == 0:  # no matches found
-        match = None
-    else:  # found a match
-        match = idxs_moving[0]  # index of the nearest / best match
-    return match
+        matches = (np.array([]), np.array([]))
+    return matches
 
 
-spatial_nbrs_moving = None
-feats_moving = None
-
-
-def _radius_matching(input_dict):
-    """Wrapper for `radius_matching` with a single input dictionary argument. Used with multiprocessing
+def radius_matching(points_fixed, points_moving, feat_fixed, feat_moving, radius, nb_workers=None, batch_size=None, matching_kwargs=None):
+    """Match fixed points to moving points within a search radius
 
     Parameters
     ----------
-    input_dict : dict
-        A dictionary with arguments to pass to `radius_matching`. Default values will be used if not provided
-
-    Returns
-    -------
-    match : int or None
-        index of moving match or None if no match was found
-
-    """
-    global spatial_nbrs_moving
-    global feats_moving
-    point_fixed = input_dict.pop('point_fixed')
-    feat_fixed = input_dict.pop('feat_fixed').reshape(-1, 1)
-    matching_kwargs = input_dict.pop('matching_kwargs', None)
-    match = radius_matching(point_fixed, feat_fixed, spatial_nbrs_moving, feats_moving, matching_kwargs)
-    return match
-
-
-def _worker_init(external_spatial_kdtree, external_feats_moving):
-    """Initialize workers that perform neighborhood matching
-
-    Parameters
-    ----------
-    external_spatial_kdtree : NearestNeighbor
-        a NearestNeighbor object fit on moving pts
-    external_feats_moving : ndarray
+    points_fixed : ndarray
+        (N, D) array of the D spatial coordinates of N fixed points
+    points_moving : ndarray
+        (M, D) array of the D spatial coordinates of M fixed points
+    feat_fixed : ndarray
+        (N, F) array of F features for N fixed points
+    feat_moving : ndarray
         (M, F) array of F features for M moving points
-
-    """
-    global spatial_kdtree
-    global feats_moving
-    spatial_kdtree = external_spatial_kdtree
-    feats_moving = external_feats_moving
-
-
-def match_pts(points_fixed, points_moving, feats_fixed, feats_moving, radius, nb_workers, chunks, matching_kwargs):
-    """Find matching moving points with a radius neighborhood of fixed points
-
-    Parameters
-    ----------
-    points_fixed : array
-        array (N, 3) of fixed points
-    points_moving : array
-        array (M, 3) of moving points
-    feats_fixed : array
-        array (N, 6) of fixed point features
-    feats_moving : array
-        array (M, 6) of moving point features
     radius : float
-        maximum distance to search for matches
-    nb_workers : int
-        number of processes to search for matches in parallel
-    chunks : int
-        number of points each worker processes at a time
+        maximum distance to search for moving match around each fixed point
+    nb_workers : int, optional
+        number of processes to perform neighborhood search in parallel. Defaults to cpu_count()
+    batch_size : int, optional
+        number of fixed points to consider at a time. Defaults to N // nb_workers
     matching_kwargs : dict, optional
         keyword arguments to pass to `feature_matching` for filtering the candidate matches.
+        The `n_jobs` kwarg will be respected by each neighborhood worker, so the default is 1.
 
     Returns
     -------
-    stationary_matches : array
-        indices of found matches in the stationary image
-    moving_matches : array
-        indices of found matches in the moving image
+    idx_fixed : ndarray
+        indices of fixed point matches. Empty if no matches are found
+    idx_moving : ndarray
+        indices of moving point matches. Empty if no matches are found
 
     """
+    if nb_workers is None:
+        nb_workers = multiprocessing.cpu_count()
 
-    prom_thresh = matching_kwargs.pop('prom_thresh', None)
-    max_fdist = matching_kwargs.pop('max_fdist', None)
+    if batch_size is None:
+        batch_size = int(np.ceil(points_fixed.shape[0]/nb_workers))
 
-    spatial_nbrs = build_neighbors(points_moving, n_neighbors=2, radius=radius, n_jobs=-1)
+    if matching_kwargs is None:
+        matching_kwargs = {}
 
-    args = []
-    for i, point_fixed in tqdm.tqdm(enumerate(points_fixed), total=len(points_fixed)):
-        input_dict = {
-            'point_fixed': point_fixed,
-            'feat_fixed': feats_fixed[i],
-            'prom_thresh': prom_thresh,
-            'max_fdist': max_fdist
-        }
-        args.append(input_dict)
+    spatial_nbrs_moving = build_neighbors(points_moving, n_neighbors=2, radius=radius, n_jobs=-1)
 
-    with multiprocessing.Pool(processes=nb_workers, initializer=_worker_init, initargs=(spatial_nbrs, feats_moving)) as pool:
-        results = list(tqdm.tqdm(pool.imap(_radius_matching, args, chunksize=chunks), total=len(points_fixed)))
+    nb_points_fixed = points_fixed.shape[0]
+    nb_batches = int(np.ceil(nb_points_fixed / batch_size))
 
-    stationary_matches = [i for i, j in enumerate(results) if j is not None]
-    moving_matches = [j for j in results if j is not None]
-    return stationary_matches, moving_matches
+    matches_fixed = []
+    matches_moving = []
+
+    with multiprocessing.Pool(nb_workers) as pool:
+
+        for b in range(nb_batches):
+            # Index range for the current batch
+            batch_start = b * batch_size
+            batch_stop = min((b + 1) * batch_size, nb_points_fixed)
+
+            # Get the coordiantes and features for the current batch
+            points_fixed_batch = points_fixed[batch_start: batch_stop]
+            feat_fixed_batch = feat_fixed[batch_start: batch_stop]
+
+            # Find neighborhoods for current batch (list of arrays for each fixed point in batch)
+            idxs_nearby = spatial_nbrs_moving.radius_neighbors(points_fixed_batch,
+                                                               return_distance=False)
+
+            # Get the features for the neighboring moving points
+            feat_moving_nearby = []
+            for idxs in idxs_nearby:
+                feat_moving_nearby.append(feat_moving[idxs])  # variable number of neighbors
+
+            # Search each neighborhood in parallel for matches
+            result = list(tqdm.tqdm(pool.imap(_feature_matching,
+                                              zip(feat_fixed_batch,
+                                                  feat_moving_nearby,
+                                                  feat_fixed_batch.shape[0]*[matching_kwargs])),
+                                    total=int(batch_stop-batch_start),
+                                    desc="batch {}/{}".format(b+1, nb_batches),
+                                    leave=False))
+            # result is a list of tuples containing matching fixed and moving indices in arrays
+
+            # filter out neighborhoods without matches--may contain a variable number of matches for each batch
+            matches_batch = np.asarray([[i, m[0]] for i, (f, m) in enumerate(result) if f.size != 0 and m.size != 0])
+
+            if len(matches_batch) == 0:
+                continue
+
+            # matches_batch[:, 0] contains batch indices for fixed matches
+            # matches_batch[:, 1] contains batch indices for moving matches (can exceed batch_size)
+
+            # convert batch match indices into global match indices
+            batch_idxs = np.arange(batch_start, batch_stop)
+            idxs_nearby_matched = idxs_nearby[matches_batch[:, 0]]  # list of arrays (neighborhoods with matches)
+
+            for nbrhd, match in zip(idxs_nearby_matched, matches_batch):
+                matches_fixed.append(batch_idxs[match[0]])
+                matches_moving.append(nbrhd[match[1]])
+
+    return np.asarray(matches_fixed), np.asarray(matches_moving)
+
+
+"""
+Find neighborhoods in smaller batches using nbrs.radius_neighbors(batch, n_jobs=-1)
+This will be multi-core, and avoids OS differences involved with forking and CoW
+We can find matches in a batch of neighborhoods by using feature_matching
+on each fixed point in the batch
+Each fixed point has it's own potential moving matches, independent from each other
+Thus, we are mapping feature_matching over a sequence of fixed_points and nbrhoods 
+Rather than spinning up the pool on each batch, we should do:
+
+with mp.Pool(n) as p:
+    for b in range(batches):
+        nbrhoods = nbrs.radius_neighbors(batch, n_jobs=-1)
+        idx_f, idx_m = p.starmap(feature_matching, zip(batch, nbrhoods))
+
+"""
+
+# Old code
 
 
 def augment(pts):
@@ -534,9 +519,6 @@ def register_pts(pts, linear_model):
     return unflatten(linear_model.predict(augmented_matrix(pts)))
 
 
-# Old code
-
-
 def average_residual(pts1, pts2):
     return np.linalg.norm(pts1-pts2, axis=-1).mean()
 
@@ -590,6 +572,123 @@ def get_nb_chunks(img):
 
 def get_chunk_index(chunk_shape, chunk_idx):
     return np.array([int(i*dim) for i, dim in zip(chunk_idx, chunk_shape)])
+
+
+# Functions for point-cloud density registration
+
+
+def calculate_image_dimensions(shape, voxel_dims):
+    return np.asarray(shape) * np.asarray(voxel_dims)
+
+
+def index_to_um_tup(pts, voxel_dims):
+    return pts * np.asarray(voxel_dims)
+
+
+def pcloud_hist(pts, dimensions, bin_size):
+    """Compute the histogram of a 3D point cloud
+
+    Parameters
+    ----------
+    pts : array
+        2D array (N, D) of points
+    dimensions : tuple or array
+        overall dimensions of the histogram (image bounds)
+    bin_size : float
+        the physical dimension of each bin
+
+    """
+    # Calculate histogram bins and bounds
+    bins = np.ceil(dimensions / bin_size)
+    density_dim = bins * bin_size
+    density_excess = density_dim - dimensions
+    density_range = np.array((-density_excess/2, dimensions + density_excess / 2))
+
+    # Calculate histograms
+    density, edges = np.histogramdd(pts, bins=bins, range=density_range.T)
+
+    return density
+
+
+def ncc(fixed, registered):
+    """Calculate the normalized cross-correlation between two images
+
+    Parameters
+    ----------
+    fixed : array
+        array of first image to be compared
+    registered: array
+        array of second image to be compared
+
+    """
+    idx = np.where(registered)
+    a = fixed[idx]
+    b = registered[idx]
+    return np.sum((a-a.mean())*(b-b.mean())/((a.size-1)*a.std()*b.std()))
+
+
+def rigid_transformation(t, r, pts):
+    """Apply rotation and translation (rigid transformtion) to a set of points
+
+    Parameters
+    ----------
+    t : array
+        1D array representing the translation vector
+    r : array
+        2D array representing the rotation matrix
+
+    """
+    return r.dot(pts.T).T + t
+
+
+def pcloud_density_registration(fixed_img, moving_img, fixed_pts, moving_pts, bin_size_um, sigma_density, niter, voxel_dims):
+
+    fixed_img_shape_um = calculate_image_dimensions(fixed_img.shape, voxel_dims)
+    moving_img_shape_um = calculate_image_dimensions(moving_img.shape, voxel_dims)
+
+    # Convert to um wrt top-upper-left (TUP)
+    fixed_pts_um = index_to_um_tup(fixed_pts, voxel_dims)
+    moving_pts_um = index_to_um_tup(moving_pts, voxel_dims)
+
+    # Make the moving histogram (coarse registration target)
+    moving_centroid_um = moving_pts_um.mean(axis=0)
+    moving_density = pcloud_hist(moving_pts_um, fixed_img_shape_um, bin_size_um)
+    moving_density_smooth = filters.gaussian(moving_density, sigma=sigma_density)
+
+    def registration_objective(theta, fixed_pts_um):
+        r = pcloud.rotation_matrix(theta)
+        fixed_coords_um_zeroed = fixed_pts_um - fixed_pts_um.mean(axis=0)
+        rotated_coords_um_zeroed = pcloud.rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
+        transformed_coords_um = rotated_coords_um_zeroed + moving_centroid_um
+        transformed_density = pcloud_hist(transformed_coords_um, fixed_img_shape_um, bin_size_um)
+        transformed_density_smooth = filters.gaussian(transformed_density, sigma=sigma_density)
+        return -ncc(moving_density_smooth, transformed_density_smooth)
+
+    res = basinhopping(registration_objective,
+                       x0=np.array([0, 0, 0]),
+                       niter=niter,
+                       T=1.0,
+                       stepsize=1.0,
+                       minimizer_kwargs={
+                           'method': 'L-BFGS-B',
+                           'args': fixed_pts_um,
+                           'bounds': [(0, 2*np.pi) for _ in range(3)],
+                           'tol': 0.01,
+                           'options': {'disp': False}
+                       },
+                       disp=True)
+    thetas = res.x
+
+    def transform_pts(theta, pts_um):
+        r = pcloud.rotation_matrix(theta)
+        fixed_coords_um_zeroed = pts_um - pts_um.mean(axis=0)
+        rotated_coords_um_zeroed = rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
+        transformed_coords_um = rotated_coords_um_zeroed + moving_centroid_um
+        return transformed_coords_um
+
+    transformed_pts_um = transform_pts(thetas, fixed_pts_um)
+
+    return transformed_pts_um
 
 
 def main():

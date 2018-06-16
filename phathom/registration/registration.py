@@ -162,13 +162,14 @@ def detect_blobs_parallel(z_arr, sigma, min_distance, min_intensity, overlap, nb
 
     pts_list = []
     with multiprocessing.Pool(nb_workers) as pool:
-        r = list(tqdm.tqdm(pool.imap(detect_blobs_in_chunk, chunks),
-                           total=len(chunks)))
+        r = list(tqdm.tqdm(pool.imap(detect_blobs_in_chunk, chunks), total=len(chunks)))
+
     for i, pts_local in enumerate(r):
         if len(pts_local) == 0:
             continue
-        chunk_coord = np.array(chunk_coords[i])
-        start = np.array(starts[i])
+
+        chunk_coord = np.asarray(chunk_coords[i])
+        start = np.asarray(starts[i])
 
         local_start = chunk_coord - start
         local_stop = local_start + np.array(z_arr.chunks)
@@ -177,9 +178,11 @@ def detect_blobs_parallel(z_arr, sigma, min_distance, min_intensity, overlap, nb
         pts_trim = pts_local[idx]
 
         pts_list.append(pts_trim + start)
+
     if len(pts_list) == 0:
         return np.zeros((0, 3))
-    return np.concatenate(pts_list)
+    else:
+        return np.concatenate(pts_list)
 
 
 def pts_to_img(pts, shape, path):
@@ -204,7 +207,7 @@ def pts_to_img(pts, shape, path):
     return img
 
 
-def mark_pts(arr, pts):
+def mark_pts(arr, pts, cval=None):
     """Mark a list of points in an array using 3-voxel cubes
 
     Parameters
@@ -213,6 +216,8 @@ def mark_pts(arr, pts):
         Input array to modify
     pts : array
         Points to mark
+    cval : int, optional
+        fill value, defaults to unique labels
 
     Returns
     -------
@@ -220,38 +225,17 @@ def mark_pts(arr, pts):
         Original array with the blob marked
 
     """
-    for pt in pts:
-        arr[pt[0], pt[1], pt[2]] = 255
-        if 0 < pt[0] < arr.shape[0]:
-            if 0 < pt[1] < arr.shape[1]:
-                if 0 < pt[2] < arr.shape[2]:
-                    arr[pt[0]-1:pt[0]+1, pt[1]-1:pt[1]+1, pt[2]-1:pt[2]+1] = 255
-    return arr
 
-
-def label_pts(arr, pts):
-    """Mark a list of points in an array using 3-voxel cubes
-
-    Parameters
-    ----------
-    arr : array
-        Input array to modify
-    pts : array
-        Points to label
-
-    Returns
-    -------
-    arr : array
-        Original array with the blob marked
-
-    """
     for i, pt in enumerate(pts):
-        label = i+1
+        if cval is None:
+            label = i+1
+        else:
+            label = cval
         arr[pt[0], pt[1], pt[2]] = label
-        if 2 < pt[0] < arr.shape[0]-3:
-            if 2 < pt[1] < arr.shape[1]-3:
-                if 2 < pt[2] < arr.shape[2]-3:
-                    arr[pt[0]-3:pt[0]+3, pt[1]-3:pt[1]+3, pt[2]-3:pt[2]+3] = label
+        if 1 < pt[0] < arr.shape[0]-2:
+            if 1 < pt[1] < arr.shape[1]-2:
+                if 1 < pt[2] < arr.shape[2]-2:
+                    arr[pt[0]-2:pt[0]+2, pt[1]-2:pt[1]+2, pt[2]-2:pt[2]+2] = cval
     return arr
 
 
@@ -287,20 +271,6 @@ def estimate_rigid(fixed_inliers, moving_inliers):
     return t, r
 
 
-def rigid_transformation(t, r, pts):
-    """Apply rotation and translation (rigid transformtion) to a set of points
-
-    Parameters
-    ----------
-    t : array
-        1D array representing the translation vector
-    r : array
-        2D array representing the rotation matrix
-
-    """
-    return r.dot(pts.T).T + t
-
-
 def indices_to_um(pts, voxel_dimensions):
     """Convert indicies to micron units wrt the top-upper-left
 
@@ -327,6 +297,20 @@ def um_to_indices(pts_um, voxel_dimensions):
 
     """
     return np.array([pts_um[:, i]/d for d, i in zip(voxel_dimensions, range(len(voxel_dimensions)))]).T
+
+
+def rigid_transformation(t, r, pts):
+    """Apply rotation and translation (rigid transformtion) to a set of points
+
+    Parameters
+    ----------
+    t : array
+        1D array representing the translation vector
+    r : array
+        2D array representing the rotation matrix
+
+    """
+    return r.dot(pts.T).T + t
 
 
 def rigid_residuals(t, r, fixed_pts, moving_pts):
@@ -410,23 +394,6 @@ def interpolate(image, coordinates, order=3):
     return output
 
 
-def ncc(fixed, registered):
-    """Calculate the normalized cross-correlation between two images
-
-    Parameters
-    ----------
-    fixed : array
-        array of first image to be compared
-    registered: array
-        array of second image to be compared
-
-    """
-    idx = np.where(registered>0)
-    a = fixed[idx]
-    b = registered[idx]
-    return np.sum((a-a.mean())*(b-b.mean())/((a.size-1)*a.std()*b.std()))
-
-
 def mean_square_error(fixed, transformed):
     """Calculate the nmean squared error between two images
 
@@ -505,7 +472,7 @@ def register_chunk(moving_img, fixed_img, output_img, transformation, start, bat
                              moving_start[2]:moving_stop[2]]
 
     # interpolate the moving data
-    interp_values = interpolate(moving_data, moving_coords_local, order=1)
+    interp_values = interpolate(moving_data, moving_coords_local, order=3)
     interp_chunk = np.reshape(interp_values, chunk_shape)
 
     # write results to disk
@@ -522,7 +489,7 @@ def register(moving_img, fixed_img, output_img, transformation, nb_workers, batc
     fixed_img: zarr array
         zarr array with read access for the target
     output_img : zarr array
-        zarr array with write acces for the output
+        zarr array with write access for the output
     transformation : callable
         function that takes one "pts" argument and warps them
     nb_workers : int
@@ -534,7 +501,7 @@ def register(moving_img, fixed_img, output_img, transformation, nb_workers, batc
     start_coords = chunk_coordinates(fixed_img.shape, fixed_img.chunks)
     args_list = []
     for i, start_coord in enumerate(start_coords):
-        start = np.array(start_coord)
+        start = np.asarray(start_coord)
         args = (moving_img, fixed_img, output_img, transformation, start, batch_size)
         args_list.append(args)
 
@@ -542,148 +509,59 @@ def register(moving_img, fixed_img, output_img, transformation, nb_workers, batc
         pool.starmap(register_chunk, args_list)
 
 
-def genetic_optimization():
-    # res = differential_evolution(registration_objective,
-    #                              bounds=[(0, 2*np.pi) for _ in range(3)],
-    #                              args=(fixed_density, moving_density),
-    #                              strategy='best1bin',
-    #                              maxiter=1000,
-    #                              popsize=15,
-    #                              tol=1e-3,
-    #                              mutation=(0.5, 1.5),
-    #                              recombination=0.5,
-    #                              disp=True)
-    # thetas = res.x
-    # print('converged theta (deg): {}'.format(thetas / np.pi * 180))
-    # print('Final correlation coefficient: {}'.format(-res.fun))
-    pass
-
-
-def svd_coarse_alignment():
-    # print('performing coarse alignment')
-    # print('pass #1')
-    # t, r = estimate_rigid(fixed_inliers, moving_inliers)
-    # # Find average residual
-    # coarse_residuals = rigid_residuals(t, r, fixed_inliers, moving_inliers)
-    # coarse_distances = residuals_to_distances(coarse_residuals)
-    # coarse_ave_distance = average_distance(coarse_distances)
-    # print('average error: {0:.1f} voxels'.format(coarse_ave_distance))
-    # if dist_thresh is None:
-    #     import matplotlib.pyplot as plt
-    #     plt.hist(coarse_distances, bins=100)
-    #     plt.show()
-    #     dist_thresh = coarse_ave_distance
-    #     print('using {} voxels for distance threshold'.format(dist_thresh))
-    # inliers_dist_idx = np.where(coarse_distances <= dist_thresh)
-    # fixed_inliers_dist = fixed_inliers[inliers_dist_idx]
-    # moving_inliers_dist = moving_inliers[inliers_dist_idx]
-    # print('{} matches remain after distance filtering'.format(len(fixed_inliers_dist)))
-    # print('pass #2')
-    # t, r = estimate_rigid(fixed_inliers_dist, moving_inliers_dist)
-    # coarse_residuals = rigid_residuals(t, r, fixed_inliers_dist, moving_inliers_dist)
-    # coarse_distances = residuals_to_distances(coarse_residuals)
-    # coarse_ave_distance = average_distance(coarse_distances)
-    # print('average error: {0:.1f} voxels'.format(coarse_ave_distance))
-    #
-    # print(r, t)
-    pass
-
-
-def rigid_registration():
-    # print('applying rigid transformation to all fixed points')
-    # fixed_registered = rigid_transformation(t, r, fixed_pts)
-    # pcloud.plot_pts(fixed_registered, moving_pts)
-
-    # print('registering the moving image')
-    # output_img = zarr.open(registered_zarr_path,
-    #                        mode='w',
-    #                        shape=fixed_img.shape,
-    #                        chunks=fixed_img.chunks,
-    #                        dtype=fixed_img.dtype)
-    # transformation = partial(rigid_transformation, t=t, r=r)
-    # register(moving_img, fixed_img, output_img, transformation, nb_workers, batch_size)
-    #
-    # print('converting zarr to tiffs')
-    # conversion.zarr_to_tifs(registered_zarr_path, registered_tif_path, nb_workers)
-    pass
-
-
-def pcloud_hist(pts, dimensions, bin_size):
-    """Compute the histogram of a 3D point cloud
-
-    Parameters
-    ----------
-    pts : array
-        2D array (N, D) of points
-    dimensions : tuple or array
-        overall dimensions of the histogram (image bounds)
-    bin_size : float
-        the physical dimension of each bin
-
-    """
-    # Find CoM (TUP offsets in um)
-    centroid = pts.mean(axis=0)
-
-    # Calculate histogram bins and bounds
-    bins = np.ceil(dimensions / bin_size)
-    density_dim = bins * bin_size
-    density_excess = density_dim - dimensions
-    density_range = np.array((-density_excess/2, dimensions + density_excess / 2))
-
-    # print('  center of mass (um): {}'.format(centroid))
-    # print('  # of bins: {}'.format(bins))
-    # print('  density dimensions: {}'.format(density_dim))
-    # print('  density excess: {}'.format(density_excess))
-    # print('  density range (um): {}'.format(density_range))
-
-    # Calculate histograms
-    density, edges = np.histogramdd(pts, bins=bins, range=density_range.T)
-
-    return density
-
-
 def main():
+    # Working directory
+    project_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/'
+
     # Input images
     voxel_dimensions = (2.0, 1.6, 1.6)
-    fixed_zarr_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/fixed.zarr'
-    moving_zarr_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/moving.zarr'
-    registered_zarr_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/registered_affine.zarr'
-    preview_zarr_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/registered_preview.zarr'
-    preview_tif_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/registered_preview.tif'
+    fixed_zarr_path = project_path + 'fixed.zarr'
+    moving_zarr_path = project_path + 'moving.zarr'
+    registered_zarr_path = project_path + 'registered_affine.zarr'
+    preview_zarr_path = project_path + 'registered_preview.zarr'
+    preview_tif_path = project_path + 'registered_preview.tif'
+
     # Caching intermediate data
-    fixed_pts_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/fixed_pts.npy'
-    moving_pts_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/moving_pts.npy'
-    fixed_pts_img_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/fixed_pts.tif'
-    moving_pts_img_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/moving_pts.tif'
-    fixed_matches_img_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/fixed_matches.tif'
-    moving_matches_img_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/moving_matches.tif'
-    fixed_features_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/fixed_features.npy'
-    moving_features_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/moving_features.npy'
-    fixed_idx_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/fixed_idx.npy'
-    moving_idx_path = '/media/jswaney/Drive/Justin/coregistration/1mm_slice/moving_idx.npy'
+    fixed_pts_path = project_path + 'fixed_pts.npy'
+    moving_pts_path = project_path + 'moving_pts.npy'
+    fixed_pts_img_path = project_path + 'fixed_pts.tif'
+    moving_pts_img_path = project_path + 'moving_pts.tif'
+    fixed_matches_img_path = project_path + 'fixed_matches.tif'
+    moving_matches_img_path = project_path + 'moving_matches.tif'
+    fixed_features_path = project_path + 'fixed_features.npy'
+    moving_features_path = project_path + 'moving_features.npy'
+    fixed_idx_path = project_path + 'fixed_idx.npy'
+    moving_idx_path = project_path + 'moving_idx.npy'
+
     # Processing
-    nb_workers = 2
+    nb_workers = 12
     overlap = 8
+
     # Keypoints
     sigma = (1.2, 2.0, 2.0)
     min_distance = 3
-    min_intensity = 600
-    # Density maps
-    bin_size_um = 200
-    sigma_density = 2.0
+    min_intensity = 500
+
+    # Coarse registration
     niter = 100
-    # Matching
+
+    # Nuclei matching
     prominence_thresh = 0.2
     max_distance = 300
     max_feat_dist = 1.0
     dist_thresh = None
+
     # Transform estimation (RANSAC)
     min_samples = 12
     residual_threshold = 2
+
     # Interpolation
     batch_size = 10000
+
     # Output
     compression = 1
+
+    # ---------------------------------- #
 
     t0 = time.time()
 
@@ -691,98 +569,63 @@ def main():
     fixed_img = zarr.open(fixed_zarr_path, mode='r')
     moving_img = zarr.open(moving_zarr_path, mode='r')
 
-    # print('detecting keypoints')
-    # t1 = time.time()
-    # fixed_pts = detect_blobs_parallel(fixed_img, sigma, min_distance, min_intensity, nb_workers, overlap)
-    # moving_pts = detect_blobs_parallel(moving_img, sigma, min_distance, min_intensity, nb_workers, overlap)
-    # t2 = time.time()
-    # print('  found {} keypoints in fixed image'.format(len(fixed_pts)))
-    # print('  found {} keypoints in moving image'.format(len(moving_pts)))
-    # print('  Took {0:.2f} seconds'.format(t2-t1))
-    #
-    # print('saving keypoint locations and images')
-    # np.save(fixed_pts_path, fixed_pts)
-    # np.save(moving_pts_path, moving_pts)
+    print('detecting keypoints')
+    t1 = time.time()
+    fixed_pts = detect_blobs_parallel(fixed_img, sigma, min_distance, min_intensity, nb_workers, overlap)
+    moving_pts = detect_blobs_parallel(moving_img, sigma, min_distance, min_intensity, nb_workers, overlap)
+    t2 = time.time()
+    print('  found {} keypoints in fixed image'.format(len(fixed_pts)))
+    print('  found {} keypoints in moving image'.format(len(moving_pts)))
+    print('  Took {0:.2f} seconds'.format(t2-t1))
+
+    print('saving blob locations')
+    np.save(fixed_pts_path, fixed_pts)
+    np.save(moving_pts_path, moving_pts)
+
+    # print('saving blob images')
     # fixed_blob_arr = mark_pts(np.zeros(fixed_img.shape, dtype='uint8'), fixed_pts)
     # moving_blob_arr = mark_pts(np.zeros(moving_img.shape, dtype='uint8'), moving_pts)
     # conversion.imsave(fixed_pts_img_path, fixed_blob_arr, compress=1)
     # conversion.imsave(moving_pts_img_path, moving_blob_arr, compress=1)
 
-    print('loading precalculated keypoints')
-    fixed_pts = np.load(fixed_pts_path)
-    moving_pts = np.load(moving_pts_path)
+    # print('loading precalculated keypoints')
+    # fixed_pts = np.load(fixed_pts_path)
+    # moving_pts = np.load(moving_pts_path)
 
-    # print('extracting features')
-    # t1 = time.time()
-    # fixed_features = pcloud.geometric_features(fixed_pts_um, nb_workers)
-    # moving_features = pcloud.geometric_features(moving_pts_um, nb_workers)
-    # t2 = time.time()
-    # print('  Took {0:.2f} seconds'.format(t2 - t1))
-    #
-    # print('saving features')
-    # np.save(fixed_features_path, fixed_features)
-    # np.save(moving_features_path, moving_features)
-
-    print('loading precalculated features')
-    fixed_features = np.load(fixed_features_path)
-    moving_features = np.load(moving_features_path)
-
-    print('performing coarse registration')
+    print('extracting features')
     t1 = time.time()
-    # Convert to um wrt top-upper-left (TUP)
-    fixed_img_shape_um = np.array(fixed_img.shape) * np.array(voxel_dimensions)
-    moving_img_shape_um = np.array(moving_img.shape) * np.array(voxel_dimensions)
-    fixed_pts_um = fixed_pts * np.array(voxel_dimensions)
-    moving_pts_um = moving_pts * np.array(voxel_dimensions)
-    print('  mixed image dimensions (um): {}'.format(fixed_img_shape_um))
-    print('  moving image dimensions (um): {}'.format(moving_img_shape_um))
-
-    # Make the moving histogram (coarse registration target)
-    moving_centroid_um = moving_pts_um.mean(axis=0)
-    moving_density = pcloud_hist(moving_pts_um, fixed_img_shape_um, bin_size_um)
-    moving_density_smooth = filters.gaussian(moving_density, sigma=sigma_density)
-
-    def registration_objective(theta, fixed_pts_um):
-        r = rotation_matrix(theta)
-        fixed_coords_um_zeroed = fixed_pts_um - fixed_pts_um.mean(axis=0)
-        rotated_coords_um_zeroed = rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
-        transformed_coords_um = rotated_coords_um_zeroed + moving_centroid_um
-        transformed_density = pcloud_hist(transformed_coords_um, fixed_img_shape_um, bin_size_um)
-        transformed_density_smooth = filters.gaussian(transformed_density, sigma=sigma_density)
-        return -ncc(moving_density_smooth, transformed_density_smooth)
-
-    res = basinhopping(registration_objective,
-                       x0=np.array([0, 0, 0]),
-                       niter=niter,
-                       T=1.0,
-                       stepsize=1.0,
-                       minimizer_kwargs={
-                           'method': 'L-BFGS-B',
-                           'args': fixed_pts_um,
-                           'bounds': [(0, 2*np.pi) for _ in range(3)],
-                           'tol': 0.01,
-                           'options': {'disp': False}
-                       },
-                       disp=True)
-    thetas = res.x
+    fixed_features = pcloud.geometric_features(fixed_pts_um, nb_workers)
+    moving_features = pcloud.geometric_features(moving_pts_um, nb_workers)
     t2 = time.time()
-    print('  converged theta (deg): {}'.format(thetas / np.pi * 180))
-    print('  Final correlation coefficient: {}'.format(-res.fun))
     print('  Took {0:.2f} seconds'.format(t2 - t1))
 
-    print('transforming the fixed point cloud')
-    t1 = time.time()
+    print('saving features')
+    np.save(fixed_features_path, fixed_features)
+    np.save(moving_features_path, moving_features)
+    #
+    # print('loading precalculated features')
+    # fixed_features = np.load(fixed_features_path)
+    # moving_features = np.load(moving_features_path)
 
-    def transform_pts(theta, pts_um):
-        r = rotation_matrix(theta)
-        fixed_coords_um_zeroed = pts_um - pts_um.mean(axis=0)
-        rotated_coords_um_zeroed = rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
-        transformed_coords_um = rotated_coords_um_zeroed + moving_centroid_um
-        return transformed_coords_um
+    # print('performing coarse registration')
+    #
+    # print(fixed_img.shape, fixed_pts.shape, fixed_features.shape)
+    # print(moving_img.shape, moving_pts.shape, moving_features.shape)
 
-    transformed_pts_um = transform_pts(thetas, fixed_pts_um)
-    t2 = time.time()
-    print('  Took {0:.2f} seconds'.format(t2-t1))
+
+    # print('transforming the fixed point cloud')
+    # t1 = time.time()
+    #
+    # def transform_pts(theta, pts_um):
+    #     r = rotation_matrix(theta)
+    #     fixed_coords_um_zeroed = pts_um - pts_um.mean(axis=0)
+    #     rotated_coords_um_zeroed = rigid_transformation(np.zeros(3), r, fixed_coords_um_zeroed)
+    #     transformed_coords_um = rotated_coords_um_zeroed + moving_centroid_um
+    #     return transformed_coords_um
+    #
+    # transformed_pts_um = transform_pts(thetas, fixed_pts_um)
+    # t2 = time.time()
+    # print('  Took {0:.2f} seconds'.format(t2-t1))
 
     # print('matching points')
     # t1 = time.time()
@@ -800,16 +643,16 @@ def main():
     # np.save(fixed_idx_path, fixed_idx)
     # np.save(moving_idx_path, moving_idx)
 
-    print('Loading cached matches')
-    fixed_idx = np.load(fixed_idx_path)
-    moving_idx = np.load(moving_idx_path)
+    # print('Loading cached matches')
+    # fixed_idx = np.load(fixed_idx_path)
+    # moving_idx = np.load(moving_idx_path)
 
-    print('indexing...')
-    fixed_matches = fixed_pts[fixed_idx]
-    moving_matches = moving_pts[moving_idx]
+    # print('Extracting matched points...')
+    # fixed_matches = fixed_pts[fixed_idx]
+    # moving_matches = moving_pts[moving_idx]
 
-    coarse_error = np.linalg.norm(moving_pts_um[moving_idx]-transformed_pts_um[fixed_idx], axis=-1).mean()
-    print('Coarse registration error: {} voxels'.format(coarse_error))
+    # coarse_error = np.linalg.norm(moving_pts_um[moving_idx]-transformed_pts_um[fixed_idx], axis=-1).mean()
+    # print('Coarse registration error: {} voxels'.format(coarse_error))
 
     # print('Saving match images')
     # fixed_matches_img = label_pts(np.zeros(fixed_img.shape, dtype='uint16'), fixed_matches)
@@ -819,19 +662,19 @@ def main():
 
     # pcloud.plot_pts(fixed_pts, moving_pts, candid1=fixed_matches, candid2=moving_matches)
 
-    print('estimating affine transformation with RANSAC')
-    t1 = time.time()
-    ransac, inlier_idx = pcloud.estimate_affine(fixed_matches,
-                                                moving_matches,
-                                                min_samples=min_samples,
-                                                residual_threshold=residual_threshold)
-    transformed_matches = pcloud.register_pts(fixed_matches, ransac)
-    average_residual = np.linalg.norm(transformed_matches - moving_matches, axis=-1).mean()
-    t2 = time.time()
-    print('  {} matches before RANSAC'.format(len(fixed_matches)))
-    print('  {} matches remain after RANSAC'.format(len(inlier_idx)))
-    print('  Ave. residual: {0:.1f} voxels'.format(average_residual))
-    print('  Took {0:.2f} seconds'.format(t2 - t1))
+    # print('estimating affine transformation with RANSAC')
+    # t1 = time.time()
+    # ransac, inlier_idx = pcloud.estimate_affine(fixed_matches,
+    #                                             moving_matches,
+    #                                             min_samples=min_samples,
+    #                                             residual_threshold=residual_threshold)
+    # transformed_matches = pcloud.register_pts(fixed_matches, ransac)
+    # average_residual = np.linalg.norm(transformed_matches - moving_matches, axis=-1).mean()
+    # t2 = time.time()
+    # print('  {} matches before RANSAC'.format(len(fixed_matches)))
+    # print('  {} matches remain after RANSAC'.format(len(inlier_idx)))
+    # print('  Ave. residual: {0:.1f} voxels'.format(average_residual))
+    # print('  Took {0:.2f} seconds'.format(t2 - t1))
 
     # print('estimating non-rigid transformation with RBFs')
     # nb_samples = 1000
