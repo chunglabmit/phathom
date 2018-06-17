@@ -540,7 +540,7 @@ def main():
     # Keypoints
     sigma = (1.2, 2.0, 2.0)
     min_distance = 3
-    min_intensity = 500
+    min_intensity = 600
 
     # Coarse registration
     niter = 100

@@ -3,7 +3,7 @@
 
 import numpy as np
 from skimage.measure import block_reduce
-from skimage.morphology import convex_hull_image
+from skimage.morphology import convex_hull_image, remove_small_objects
 from scipy.optimize import basinhopping
 from scipy.ndimage import map_coordinates
 from scipy.ndimage.morphology import distance_transform_edt
@@ -276,7 +276,7 @@ def optimize(source, target, center=None, t0=None, theta0=None, niter=10):
         t0 = target_center - center
     if theta0 is None:
         theta0 = np.zeros_like(center)
-    bounds = [(-s, s) for s in target.shape] + [(0, 2 * np.pi) for _ in range(3)]
+    bounds = [(-s, s) for s in target.shape] + [(-np.pi, np.pi) for _ in range(3)]
     res = basinhopping(_registration_objective,
                        x0=np.concatenate((t0, theta0)),
                        niter=niter,
@@ -323,17 +323,20 @@ def _scale_rigid_params(t, center, factors):
     return t*f, center*f
 
 
-def coarse_registration(source, target, threshold, niter):
+def coarse_registration(source, target, threshold, opt_kwargs):
     source_mask = threshold_img(source, threshold)
     target_mask = threshold_img(target, threshold)
 
-    source_hull = convex_hull(source_mask)
-    target_hull = convex_hull(target_mask)
+    source_no_small = remove_small_objects(source_mask, min_size=10)
+    target_no_small = remove_small_objects(target_mask, min_size=10)
+
+    source_hull = convex_hull(source_no_small)
+    target_hull = convex_hull(target_no_small)
 
     source_edt = distance_transform(source_hull)
     target_edt = distance_transform(target_hull)
 
-    return optimize(source_edt, target_edt, niter=niter)
+    return optimize(source_edt, target_edt, **opt_kwargs)
 
 
 def main():
