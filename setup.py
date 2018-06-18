@@ -26,7 +26,7 @@ setup(
     packages=["phathom"],
     entry_points={ 'console_scripts': [
         'phathom-segmentation=phathom.segmentation:main',
-        'phathom-score-centroids=phathom.score.main'
+        'phathom-score-centroids=phathom.score:main'
     ]},
     url="https://github.com/chunglabmit/phathom",
     license="MIT",
