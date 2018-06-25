@@ -8,4 +8,3 @@ zarr
 h5py
 tqdm
 pandas
-https://github.com/anntzer/clahe.git#egg=clahe
