@@ -7,78 +7,76 @@ import numpy as np
 import scipy.ndimage as ndi
 import skimage
 from skimage import segmentation, feature, morphology, filters, exposure, transform, measure
-import matplotlib.pyplot as plt
+from skimage.filters import gaussian
 import multiprocessing
+from functools import partial
 import os.path
 import shutil
+from warnings import warn
 
 
 # Set consistent numpy random state
 np.random.seed(123)
 
-# Initialize the output list
-outputs = []
+# # Initialize the output list
+# outputs = []
+#
+#
+# def add_output(name, data):
+#     outputs.append({'name': name, 'data': data})
+# def write_output():
+#     if outputs:
+#         for d in outputs:
+#             name = d['name']
+#             print('saving {}'.format(name))
+#             imageio.imsave('../data/{}.tif'.format(d['name']), d['data'].astype('float32'))
 
 
 def gradient(data):
     fz, fy, fx = np.gradient(data, edge_order=2)
-    gradient = np.zeros((*data.shape, 3))
-    gradient[:,:,:,0] = fz
-    gradient[:,:,:,1] = fy
-    gradient[:,:,:,2] = fx
-    return gradient
+    grad = np.zeros((*data.shape, 3))
+    grad[..., 0] = fz
+    grad[..., 1] = fy
+    grad[..., 2] = fx
+    return grad
 
 
-def hessian_2d(data):
+def hessian_2d(data, sigma):
     l1 = np.zeros(data.shape)
     for i in range(data.shape[0]):
-        img = data[i,:,:]
-        Hyy, Hyx, Hxx = skimage.feature.hessian_matrix(img, sigma=1, mode='reflect')
-        l1[i,:,:], l2 = skimage.feature.hessian_matrix_eigvals(Hyy, Hyx, Hxx)
+        img = data[i]
+        Hyy, Hyx, Hxx = skimage.feature.hessian_matrix(img, sigma=sigma, mode='reflect')
+        l1[i], l2 = skimage.feature.hessian_matrix_eigvals(Hyy, Hyx, Hxx)
 
 
 def hessian(data):
     grad = np.gradient(data)
-
     n_dims = len(grad)
     H = np.zeros((*data.shape, n_dims, n_dims))
     for i, first_deriv in enumerate(grad):
         for j in range(i, n_dims):
             second_deriv = np.gradient(first_deriv, axis=j)
-            H[:,:,:,i,j] = second_deriv
+            H[..., i, j] = second_deriv
             if i != j:
-                H[:,:,:,j,i] = second_deriv
-
+                H[..., j, i] = second_deriv
     return H
 
 
 def structure_tensor(grad):
     S = np.zeros((*grad.shape, 3))
-    fz = grad[:,:,:,0]
-    fy = grad[:,:,:,1]
-    fx = grad[:,:,:,2]
-    S[:,:,:,0,0] = fz**2
-    S[:,:,:,1,1] = fy**2
-    S[:,:,:,2,2] = fx**2
-    S[:,:,:,0,1] = fz*fy
-    S[:,:,:,0,2] = fz*fx
-    S[:,:,:,1,2] = fy*fx
-    S[:,:,:,1,0] = fz*fy
-    S[:,:,:,2,0] = fz*fx
-    S[:,:,:,2,1] = fy*fx
+    fz = grad[..., 0]
+    fy = grad[..., 1]
+    fx = grad[..., 2]
+    S[..., 0, 0] = fz**2
+    S[..., 1, 1] = fy**2
+    S[..., 2, 2] = fx**2
+    S[..., 0, 1] = fz*fy
+    S[..., 0, 2] = fz*fx
+    S[..., 1, 2] = fy*fx
+    S[..., 1, 0] = fz*fy
+    S[..., 2, 0] = fz*fx
+    S[..., 2, 1] = fy*fx
     return S
-
-
-def add_output(name, data):
-    outputs.append({'name': name, 'data': data})
-
-
-def write_output():
-    if outputs:
-        for d in outputs:
-            name = d['name']
-            print('saving {}'.format(name))
-            imageio.imsave('../data/{}.tif'.format(d['name']), d['data'].astype('float32'))
 
 
 def weingarten(g):
@@ -89,11 +87,11 @@ def weingarten(g):
     L = np.zeros(S.shape)
     for i in range(3):
         for j in range(3):
-            L[:,:,:,i,j] = l
+            L[..., i, j] = l
     eye = np.zeros(S.shape)
-    eye[:,:,:,0,0] = 1
-    eye[:,:,:,1,1] = 1
-    eye[:,:,:,2,2] = 1
+    eye[..., 0, 0] = 1
+    eye[..., 1, 1] = 1
+    eye[..., 2, 2] = 1
     B = S+eye
     A = H*np.linalg.inv(B)/L
     return A
@@ -105,6 +103,7 @@ def eigvalsh(A):
 
 def eigvals_of_weingarten(g):
     return eigvalsh(weingarten(g))
+
 
 def convex_seeds(eigvals):
     eig_neg = np.clip(eigvals, None, 0)
@@ -146,13 +145,12 @@ def regionprops(intensity_img, labels_img):
     return None
 
 
-#def find_centroids(labels_img):
-#    nb_regions = labels_img.max()
-#    properties = measure.regionprops(labels_img)
-#    centroids = np.zeros((nb_regions, 3))
-#    for i, region in enumerate(properties):
-#        centroids[i] = region.centroid
-#    return centroids
+def find_volumes(l):
+    z, y, x = np.where(l > 0)
+    a = np.bincount(l[z, y, x])
+    return a[1:]
+
+
 def find_centroids(l):
     z, y, x = np.where(l > 0)
     a = np.bincount(l[z, y, x])
@@ -163,96 +161,183 @@ def find_centroids(l):
     return np.column_stack(
         (zz.astype(float) / a, yy.astype(float) / a, xx.astype(float) / a))[1:]
 
-def segment(input_file, output_paths, upsample, sigma, h, T):
-    # # Calculate the voxel dimensions after upsampling
-    # voxel_shape = np.array([d/s for d, s in zip(orig_vox_dim, upsampling_scale)])
-    # print(f'Voxel dimensions [um]: {voxel_shape}')
-    # voxel_volume = voxel_shape.prod()
-    # print(f'Voxel volume [um3]: {voxel_volume:.3f}')
 
-    # Load the dataset
-    # print('Loading the dataset')
-    data = imageio.imread(input_file)
+def _calc_chunk_histogram(arr, start_coord, chunks):
+    stop_coord = np.minimum(arr.shape, start_coord + np.asarray(chunks))
+    data = utils.extract_box(arr, start_coord, stop_coord)
+    if data.dtype != 'uint8':
+        data = data.astype('float32')
+        data /= 4095
+        data *= 255
+        data = data.astype('uint8')
+    _, freq, _ = graphcuts.hist(data, bins=256)
+    return freq
 
-    # Contrast stretching
-    # print('Normalizing the image')
-    # data = exposure.rescale_intensity(data, in_range=(0, 2**12-1))
 
-    # Convert to float32
-    # print('Converting to float32')
-    data = skimage.img_as_float(data).astype(np.float32)
+def calculate_histogram(image, chunks, nb_workers):
+    freqs = utils.pmap_chunks(_calc_chunk_histogram, image, chunks, nb_workers)
+    freq = np.zeros_like(freqs[0])
+    for f in freqs:
+        freq += f
+    # freq[-1] = 0  # Override the number of saturated pixels
+    if image.dtype != 'uint8':
+        left_edges, _, width = graphcuts.hist(np.zeros(1, dtype=np.uint8))
+    else:
+        left_edges, _, width = graphcuts.hist(np.zeros(1, dtype=image.dtype))
+    return left_edges, freq, width
 
-    # Upsampling
-    # print('Upsampling the image')
-    # LEEK: current version of skimage.transform.rescale does not support 3d
-    if any([_ != 1.0 for _ in upsample]):
-        data = transform.rescale(data, scale=upsample, order=3, multichannel=False, mode='reflect', anti_aliasing=True)
-    # add_output('upsampled', data)
 
-    # Extract foreground
-    # print('Extracting foreground mask')
-    # mask = graphcuts.run_graph_cuts(data, lambdaI=0, lambda_const=2)
-    # T = max(minT, filters.threshold_otsu(data))
-    mask = data > T
+def otsu_threshold(freq):
+    total = np.sum(freq)
+    sumB = 0
+    wB = 0
+    maximum = 0.0
+    sum1 = np.sum(np.arange(len(freq)) * freq)
+    for i, f in enumerate(freq):
+        wB = wB + f
+        wF = total - wB
+        if wB == 0 or wF == 0:
+            continue
+        sumB = sumB + (i-1)*f
+        mF = (sum1 - sumB) / wF
+        between = wB * wF * ((sumB / wB) - mF) * ((sumB / wB) - mF)
+        if between >= maximum:
+            level = i
+            maximum = between
+    return level
 
-    # Save the foregound image
-    # imageio.imsave(file=output_paths['foreground_path'], data=mask.astype('uint8'))
 
-    # Gaussian smoothing
-    # print('Smoothing the image')
-    g = filters.gaussian(data, sigma=sigma)
-    # add_output('g', g)
+def mean_threshold(freq):
+    return np.sum(np.arange(len(freq)) * freq) / np.sum(freq)
 
-    # Calculate the Weingarten operator
-    # print('Calculating the Weingarten shape operator')
-    A = weingarten(g)
 
-    # print('Calculating eigenvalues')
-    eigvals = eigvalsh(A)
+def calculate_seeds(eigvals, mask, h):
     eigen_seeds = convex_seeds(eigvals)
-    pos_curv = positive_curvatures(eigvals)
-    seed_prob = seed_probability(eigen_seeds)*mask # filters out background seeds
-
-    # H-maxima transform
-    # print('Performing H-maxima transform')
-    hmax = morphology.reconstruction(seed_prob-h, seed_prob, 'dilation')
+    seed_prob = seed_probability(eigen_seeds) * mask  # filters out background seeds
+    hmax = morphology.reconstruction(seed_prob - h, seed_prob, 'dilation')
     extmax = seed_prob - hmax
-    seeds = (extmax > 0)*mask # Apply mask here to avoid a trivial background seed
+    seeds = (extmax > 0) * mask  # avoid any seeds in the background
+    return seeds
 
-    # Label the detected maxima
-    # print('Labeling the detected seeds')
-    structure = morphology.cube(width=3) # 28-connected
-    markers = ndi.label(seeds, structure=structure)[0]
-    # nb_regions = markers.max()
-    # print('Number of cells detected: {}'.format(nb_regions))
 
-    # print('Performing seeded watershed segmentation')
-    seg = morphology.watershed(pos_curv, markers, mask=mask, watershed_line=True)
+def segment_nuclei(image, mask, sigma, h):
+    """Segment nuclei using curvature-based watershed
 
-    # print('Removing objects on the border')
-    # seg = segmentation.clear_border(seg, buffer_size=4)
+    Parameters
+    ----------
+    image : ndarray
+        nuclei image to segment
+    mask : ndarray
+        foreground mask
+    sigma : float or tuple
+        amount to smooth the image
+    h : int
 
-    # print('Converting to binary mask')
-    binary_seg = seg > 0
+    Returns
+    -------
+    binary_seg : ndarray
+        bianry segmentation of nuclei with watershed lines
+    nb_nuclei : int
+        number of nuclei detected in `image`
 
-    # print('Saving image')
-    if "segmentation_path" in output_paths:
-        imageio.imsave(path=output_paths['segmentation_path'], data=binary_seg.astype('uint8'))
+    """
+    image = skimage.img_as_float32(image)
+    g = gaussian(image, sigma=sigma)
+    eigvals = eigvals_of_weingarten(g)
+    pos_curv = positive_curvatures(eigvals)
+    seeds = calculate_seeds(eigvals, mask, h)
+    markers = ndi.label(seeds, morphology.cube(width=3))[0]
+    nb_nuclei = int(markers.max())
+    labels = morphology.watershed(pos_curv, markers, mask=mask, watershed_line=True)
+    binary_seg = labels > 0
+    return binary_seg, nb_nuclei
 
-    # Calculate the distance transform
-    #dist_map = ndi.morphology.distance_transform_edt(binary_seg)
 
-    # Save the distance transform
-    # imageio.imsave(file=output_paths['distance_path'], data=dist_map.astype('float32'))
+def _segment_chunk(in_arr, start_coord, chunks, out_arr, overlap, back_mu, obj_mu,
+                        w_const, w_grad, sigma, h):
+    # extract ghosted chunk of data
+    end_coord = np.minimum(in_arr.shape, start_coord + np.asarray(chunks))
+    start_overlap = np.maximum(np.zeros(in_arr.ndim, 'int'),
+                               np.array([s - overlap for s in start_coord]))
+    stop_overlap = np.minimum(in_arr.shape, np.array([e + overlap for e in end_coord]))
+    data_overlap = utils.extract_box(in_arr, start_overlap, stop_overlap)
 
-    # Calculate the normalized gradient of the distance map
-    #grad = gradient(dist_map)
-    #norm = np.linalg.norm(grad, axis=-1)
-    #norm_grad = grad / (1e-6 + np.reshape(norm, (*norm.shape, 1)))
+    # segment the chunk
+    mask_overlap = graphcuts.graph_cuts(data_overlap, back_mu, obj_mu, w_const, w_grad)
+    binary_seg_overlap, nb_nuclei = segment_nuclei(data_overlap, mask_overlap, sigma, h)
+    binary_seg_overlap_eroded = ndi.binary_erosion(binary_seg_overlap)
 
-    # Save the direction map
-    # imageio.imsave(file=output_paths['direction_path'], data=norm_grad.astype('float32'))
-    return binary_seg
+    # write the segmentation result
+    start_local = start_coord - start_overlap
+    end_local = end_coord - start_overlap
+    binary_seg = utils.extract_box(binary_seg_overlap_eroded, start_local, end_local)
+    stop_out = np.minimum(out_arr.shape, end_coord)
+    utils.insert_box(out_arr, start_coord, stop_out, binary_seg)
+    return nb_nuclei
+
+
+def parallel_segment_nuclei(in_arr, out_arr, w_const, w_grad, sigma, h, chunks, overlap=0, nb_workers=None):
+    """Segments nuclei in parallel using overlapping chunks
+
+    Parameters
+    ----------
+    in_arr : array-like
+        Zarr or SharedMemory array of nuclei image
+    out_arr : array_like
+        Zarr of SharedMemory array for labeled segmentation result
+    w_const : float
+        constance edge weight for graph cuts foreground mask
+    w_grad : float
+        gradient-dependend weight for graph cuts foreground mask
+    sigma : float or tuple
+        amount to smooth the input image before segmentation calcualtions
+    h : float
+        height of extended maxima in seed calculation
+    chunks : tuple
+        size of the chunks to processes in each worker
+    overlap : int
+        number of pixels to overlap adjacent chunks. Default, 0
+    nb_workers : int, optional
+        number of parallel processes to use. Default, cpu_count
+
+    Returns
+    -------
+    nb_nuclei : int
+        number of nuclei detected
+
+    """
+    if overlap == 0:
+        warn('Using zero overlap, may see artifacts at chunk boundaries')
+    if nb_workers is None:
+        nb_workers = multiprocessing.cpu_count()
+
+    print('calculating the histogram')
+    hist_output = calculate_histogram(in_arr, chunks, nb_workers)  # 8-bit histogram
+
+    print('estimating foreground and background levels')
+    _, freq, _ = hist_output
+    threshold = mean_threshold(freq) * (2/3)  # Heuristic threshold
+    back_mu, obj_mu = graphcuts.fit_poisson_mixture(hist_output, threshold)
+    if in_arr.dtype != 'uint8':  # checking if 12-bit
+        back_mu *= (4095 / 255)
+        obj_mu *= (4095 / 255)
+    print('threshold {}, back_mu {}, obj_mu {}'.format(threshold, back_mu, obj_mu))
+
+    f = partial(_segment_chunk,
+                out_arr=out_arr,
+                overlap=overlap,
+                back_mu=back_mu,
+                obj_mu=obj_mu,
+                w_const=w_const,
+                w_grad=w_grad,
+                sigma=sigma,
+                h=h)
+
+    arr = out_arr[:]  # Need to load into memory to do the labeling
+    label_image = ndi.label(arr, morphology.cube(width=3))[0]
+    out_arr[:] = label_image  # overwrite the binary seg with labeled seg
+    nb_nuclei_list = utils.pmap_chunks(f, in_arr, chunks, nb_workers)
+    return sum(nb_nuclei_list)
 
 
 def segment_chunks(working_dir, nb_workers, upsampling, sigma, h, T):
@@ -287,18 +372,17 @@ def segment_chunks(working_dir, nb_workers, upsampling, sigma, h, T):
     print('Done!')
 
 
-def main():
-    parser = argparse.ArgumentParser()
+def _add_parser_args(parser):
     parser.add_argument(
         "--input-path",
         help="Path to the image to be segmented")
     parser.add_argument(
         "--output-path",
-        help = "Path to the segmentation file to be generated")
+        help="Path to the segmentation file to be generated")
     parser.add_argument(
         "--centroids-path",
-        help = "Path to the .npy file containing the centroids of "
-        "detected cells"
+        help="Path to the .npy file containing the centroids of "
+             "detected cells"
     )
     parser.add_argument(
         "--upsampling",
@@ -323,9 +407,14 @@ def main():
     parser.add_argument(
         "--min-voxels", type=int, default=0
     )
+    return parser
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser = _add_parser_args(parser)
     args = parser.parse_args()
-    # input_path = '../data/spim_crop/input/z00000_y00000_x00000.tif'
-    # output_path = '../data/spim_crop/test.tif'
+
     upsampling = list(map(float, args.upsampling.split(",")))
     sigma = list(map(float, args.sigma.split(",")))
     h = args.maxima_suppression_threshold

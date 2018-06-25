@@ -14,6 +14,19 @@ def open(zarr_path):
     return zarr.open(zarr_path)
 
 
+def new_zarr(path, shape, chunks, dtype, **kwargs):
+    compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)
+    z_arr_out = zarr.open(path,
+                          mode='w',
+                          shape=shape,
+                          chunks=chunks,
+                          dtype=dtype,
+                          compressor=compressor,
+                          **kwargs)
+    return z_arr_out
+
+
+
 def write_subarray(data, z_arr, start):
     """ Write a subarray into a zarr array.
 

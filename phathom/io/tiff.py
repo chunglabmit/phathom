@@ -28,9 +28,9 @@ def imread_parallel(paths, nb_workers):
     :param paths: A list of tiff paths to read (order is preserved)
     :param nb_workers: An int indicating how many parallel processes to use
     """
-    img = imread(tif_paths[0])
-    shape = (len(tif_paths), *img.shape)
+    img = imread(paths[0])
+    shape = (len(paths), *img.shape)
     data = np.zeros(shape, dtype=img.dtype)
-    with multiprocessing.Pool(16) as pool:
-        data = np.array(pool.map(imread, tif_paths))
+    with multiprocessing.Pool(nb_workers) as pool:
+        data = np.array(pool.map(imread, paths))
     return data

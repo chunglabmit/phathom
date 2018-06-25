@@ -6,4 +6,7 @@ scikit-learn
 PyMaxflow
 zarr
 h5py
+cloudvolume
 tqdm
+pandas
+https://github.com/anntzer/clahe.git#egg=clahe

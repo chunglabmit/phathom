@@ -19,8 +19,10 @@ setup(
         "zarr",
         "numpy",
         "h5py",
+        "cloudvolume",
         "tqdm",
-        "scikit-learn"
+        "scikit-learn",
+        "pandas"
     ],
     author="Kwanghun Chung Lab",
     packages=["phathom"],

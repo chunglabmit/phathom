@@ -3,6 +3,8 @@ import os
 import pickle
 import numpy as np
 from itertools import product
+import multiprocessing
+import tqdm
 import sys
 if sys.platform.startswith("linux"):
     is_linux = True
@@ -156,7 +158,7 @@ def chunk_coordinates(shape, chunks):
 
     Returns
     -------
-    list
+    start_coords : ndarray
         the starting indices of each chunk
 
     """
@@ -164,7 +166,129 @@ def chunk_coordinates(shape, chunks):
     start = []
     for indices in product(*tuple(range(n) for n in nb_chunks)):
         start.append(tuple(i*c for i, c in zip(indices, chunks)))
-    return start
+    return np.asarray(start)
+
+
+def box_slice_idx(start, stop):
+    """Creates an index tuple for a bounding box from `start` to `stop` using slices
+
+    Parameters
+    ----------
+    start : array-like
+        index of box start
+    stop : array-like
+        index of box stop (index not included in result)
+
+    Returns
+    -------
+    idx : tuple
+        index tuple for bounding box
+
+    """
+    return tuple(np.s_[a:b] for a, b in zip(start, stop))
+
+
+def extract_box(arr, start, stop):
+    """Indexes `arr` from `start` to `stop`
+
+    Parameters
+    ----------
+    arr : array-like or SharedMemory
+        input array to index
+    start : array-like
+        starting index of the slice
+    stop : array-like
+        ending index of the slice. The element at this index is not included.
+
+    Returns
+    -------
+    box : ndarray
+        resulting box from `arr`
+
+    """
+    idx = box_slice_idx(start, stop)
+    if isinstance(arr, SharedMemory):
+        with arr.txn() as a:
+            box = a[idx]
+    else:
+        box = arr[idx]
+    return box
+
+
+def insert_box(arr, start, stop, data):
+    """Indexes `arr` from `start` to `stop` and inserts `data`
+
+    Parameters
+    ----------
+    arr : array-like
+        input array to index
+    start : array-like
+        starting index of the slice
+    stop : array-like
+        ending index of the slice. The element at this index is not included.
+    data : array-like
+        sub-array to insert into `arr`
+
+    Returns
+    -------
+    box : ndarray
+        resulting box from `arr`
+
+    """
+    idx = box_slice_idx(start, stop)
+    if isinstance(arr, SharedMemory):
+        with arr.txn() as a:
+            a[idx] = data
+    else:
+        arr[idx] = data
+    return arr
+
+
+def pmap_chunks(f, arr, chunks=None, nb_workers=None):
+    """Maps a function over an array in parallel using chunks
+
+    The function `f` should take a reference to the array, a starting index, and the chunk size.
+    Since each subprocess is handling it's own indexing, any overlapping should be baked into `f`.
+    Caution: `arr` may get copied if not using memmap. Use with SharedMemory or Zarr array to avoid copies.
+
+    Parameters
+    ----------
+    f : callable
+        function with signature f(arr, start_coord, chunks). May need to use partial to define other args.
+    arr : array-like
+        an N-dimensional input array
+    chunks : tuple, optional
+        the shape of chunks to use. Default tries to access arr.chunks and falls back to arr.shape
+    nb_workers : int, optional
+        number of parallel processes to apply f with. Default, cpu_count
+
+    Returns
+    -------
+    result : list
+        list of results for each chunk
+
+    """
+    if chunks is None:
+        try:
+            chunks = arr.chunks
+        except AttributeError:
+            chunks = arr.shape
+
+    if nb_workers is None:
+        nb_workers = multiprocessing.cpu_count()
+
+    start_coords = chunk_coordinates(arr.shape, chunks)
+
+    args_list = []
+    for i, start_coord in enumerate(start_coords):
+        args = (arr, start_coord, chunks)
+        args_list.append(args)
+
+    # TODO: fix this tqdm progbar. It's just displaying the list conversion progress
+    with multiprocessing.Pool(processes=nb_workers) as pool:
+        results = list(tqdm.tqdm(pool.starmap(f, args_list)))
+
+    return results
 
 
 # mapper = None

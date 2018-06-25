@@ -11,8 +11,8 @@ from scipy.ndimage.measurements import center_of_mass
 import tqdm
 from phathom.registration import pcloud
 from phathom import io
-import neuroglancer
-from nuggt.utils import ngutils
+# import neuroglancer
+# from nuggt.utils import ngutils
 
 
 def ncc(img1, img2, nonzero=False):
@@ -353,24 +353,24 @@ def main():
     # moving_img = io.zarr.open(moving_zarr_path)
     # io.zarr.downsample_zarr(moving_img, factors, moving_down_path, nb_workers=12)
 
-    fixed_img = np.array(io.zarr.open(fixed_zarr_path))
-    moving_img = np.array(io.zarr.open(moving_zarr_path))
-
-    viewer = neuroglancer.Viewer()
-    print(viewer)
-
-    with viewer.txn() as txn:
-        fixed_img_source = neuroglancer.LocalVolume(fixed_img.astype(np.float32))
-        fixed_img_shader = ngutils.green_shader % (1 / normalization)
-        txn.layers['fixed'] = neuroglancer.ImageLayer(source=fixed_img_source,
-                                                      shader=fixed_img_shader)
-
-        moving_img_source = neuroglancer.LocalVolume(moving_img.astype(np.float32))
-        moving_img_shader = ngutils.red_shader % (1 / normalization)
-        txn.layers['moving'] = neuroglancer.ImageLayer(source=moving_img_source,
-                                                       shader=moving_img_shader)
-
-    input('Press any key to continue...')
+    # fixed_img = np.array(io.zarr.open(fixed_zarr_path))
+    # moving_img = np.array(io.zarr.open(moving_zarr_path))
+    #
+    # viewer = neuroglancer.Viewer()
+    # print(viewer)
+    #
+    # with viewer.txn() as txn:
+    #     fixed_img_source = neuroglancer.LocalVolume(fixed_img.astype(np.float32))
+    #     fixed_img_shader = ngutils.green_shader % (1 / normalization)
+    #     txn.layers['fixed'] = neuroglancer.ImageLayer(source=fixed_img_source,
+    #                                                   shader=fixed_img_shader)
+    #
+    #     moving_img_source = neuroglancer.LocalVolume(moving_img.astype(np.float32))
+    #     moving_img_shader = ngutils.red_shader % (1 / normalization)
+    #     txn.layers['moving'] = neuroglancer.ImageLayer(source=moving_img_source,
+    #                                                    shader=moving_img_shader)
+    #
+    # input('Press any key to continue...')
 
 
 if __name__ == '__main__':
