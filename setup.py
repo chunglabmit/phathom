@@ -19,7 +19,6 @@ setup(
         "zarr",
         "numpy",
         "h5py",
-        "cloudvolume",
         "tqdm",
         "scikit-learn",
         "pandas"
