@@ -25,10 +25,18 @@ setup(
         "pandas"
     ],
     author="Kwanghun Chung Lab",
-    packages=["phathom"],
+    packages=["phathom",
+              "phathom.atlas",
+              "phathom.db",
+              "phathom.io",
+              "phathom.phenotype",
+              "phathom.preprocess",
+              "phathom.registration",
+              "phathom.segmentation"
+              ],
     entry_points={ 'console_scripts': [
         'phathom-segmentation=phathom.segmentation:main',
-        'phathom-score-centroids=phathom.score.main'
+        'phathom-score-centroids=phathom.score:main'
     ]},
     url="https://github.com/chunglabmit/phathom",
     license="MIT",
