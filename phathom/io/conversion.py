@@ -19,7 +19,7 @@ from phathom import utils
 from phathom import io
 import skimage.external.tifffile as tifffile
 import zarr
-from numcodecs import Blosc
+from numcodecs import Blosc, Delta
 import numpy as np
 import multiprocessing
 import h5py
@@ -30,11 +30,16 @@ import tqdm
 
 
 def tifs_to_zarr_chunks(z_arr, tif_paths, start_list, nb_workers):
-    data = io.tiff.imread_parallel(tif_paths, nb_workers)  # read tiffs in parallel
+    if nb_workers > 1:
+        # TODO: Figure out why this gives MaybeEncodingError for large chunks
+        data = io.tiff.imread_parallel(tif_paths, nb_workers)
+        # data = io.tiff.imread(tif_paths)
+    else:
+        data = io.tiff.imread(tif_paths)
 
     args = []
     for start in start_list:
-        stop = tuple(min(e, s+c) for e,s,c in zip(z_arr.shape, start, z_arr.chunks))
+        stop = tuple(min(e, s+c) for e, s, c in zip(z_arr.shape, start, z_arr.chunks))
         chunk = data[:, start[1]:stop[1], start[2]:stop[2]]
         args.append((chunk, z_arr, start))
 
@@ -52,9 +57,10 @@ def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False, nb_workers=1):
     :param nb_workers: int of workers for parallel io
     :return: reference to persistent (on-disk) zarr array
     """
-    compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)
+    compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)  # good for integers
+    store = zarr.storage.NestedDirectoryStore(zarr_path)
     tif_paths, _ = utils.tifs_in_dir(tif_dir)
-    img = io.tiff.imread(tif_paths[0])
+    img = io.tiff.imread(tif_paths[0]).astype(np.uint16)
     shape = (len(tif_paths), *img.shape)
     dtype = img.dtype
     # TODO: Swtich to producer-consumer model for tif reading -> zarr writing
@@ -62,10 +68,14 @@ def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False, nb_workers=1):
         data = np.zeros(shape, dtype=dtype)
         for z, tif_path in enumerate(tif_paths):
             data[z] = io.tiff.imread(tif_path)
-        zarr.save_array(zarr_path, data, chunks=chunks, compression=compressor)
+        zarr.save_array(zarr_path, data, store=store, chunks=chunks, compression=compressor)
         return data
     else:
-        z_arr = zarr.open(zarr_path, mode='w', shape=shape, chunks=chunks, dtype=dtype, compression=compressor)
+        z_arr = zarr.open(store,
+                          chunks=chunks,
+                          dtype=dtype,
+                          shape=shape,
+                          compression=compressor)
         nb_chunks = utils.chunk_dims(shape, chunks)
         start_list = utils.chunk_coordinates(shape, chunks)
         xy_chunks = nb_chunks[1] * nb_chunks[2]
@@ -234,17 +244,22 @@ def ims_to_zarr(ims_path, zarr_path, chunks, nb_workers):
 
 
 def main():
-    tif_dir = '/media/share2/Justin/organoid/syto16_remount'
-    zarr_path = '/media/share2/Justin/organoid/syto16_remount.zarr'
-    chunks = (256, 512, 512)
+    tif_dir = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/fixed/processed_tiffs2'
+    zarr_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/fixed/zarr_uint16'
+    chunks = (64, 128, 128)
     # tif_path = 'D:/Justin/coregistration/moving/C0/roi1_registered_tifs/'
-    nb_workers = 4
+    nb_workers = 6
 
-    tifs_to_zarr(tif_dir, zarr_path, chunks, nb_workers=12)
+    # tifs_to_zarr(tif_dir, zarr_path, chunks, nb_workers=nb_workers)
 
-    # zarr_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/nonrigid.zarr'
-    # tif_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/nonrigid.tifs'
-    # zarr_to_tifs(zarr_path, tif_path, nb_workers=12)
+    tif_dir = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/moving/processed_tiffs2'
+    zarr_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/moving/zarr_uint16'
+
+    tifs_to_zarr(tif_dir, zarr_path, chunks, nb_workers=nb_workers)
+
+    # zarr_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/fixed.zarr'
+    # tif_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/fixed.tifs'
+    # zarr_to_tifs(zarr_path, tif_path, nb_workers=4)
 
     # source_zarr_path = 'D:/Justin/coregistration/fixed/C0/fixed.zarr'
     # dest_zarr_path = 'D:/Justin/coregistration/fixed/C0/fixed_int.zarr'

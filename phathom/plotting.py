@@ -1,6 +1,7 @@
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
+
 def plot_pts(pts1, pts2=None, alpha=1, candid1=None, candid2=None):
     """ Plot point clouds with correspondences.
 
@@ -71,3 +72,5 @@ def plot_densities(fixed, moving=None, registered=None, z=0, mip=False, clim=Non
             registered_img = registered[z]
         plt.imshow(registered_img, clim=clim)
         plt.show()
+
+
