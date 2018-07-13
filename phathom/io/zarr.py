@@ -104,7 +104,8 @@ def downsample_zarr(z_arr_in, factors, output_path, nb_workers=1, **kwargs):
     nb_chunks = utils.chunk_dims(z_arr_in.shape, z_arr_in.chunks)
     shape = np.asarray(chunks) * np.asarray(nb_chunks)
 
-    z_arr_out = zarr.open(output_path,
+    store = zarr.NestedDirectoryStore(output_path)
+    z_arr_out = zarr.open(store,
                           mode='w',
                           shape=shape,
                           chunks=chunks,
