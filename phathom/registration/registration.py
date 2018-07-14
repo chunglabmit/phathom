@@ -596,30 +596,31 @@ def register(moving_img, output_img, transformation, nb_workers, batch_size=None
 
 def main():
     # Working directory
-    project_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/'
+    # project_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/'
+    project_path = '/home/jswaney/coregistration/'
 
     # Input images
     voxel_dimensions = (2.0, 1.6, 1.6)
-    fixed_zarr_path = project_path + 'fixed.zarr'
-    moving_zarr_path = project_path + 'moving.zarr'
-    registered_zarr_path = project_path + 'registered_affine.zarr'
-    preview_zarr_path = project_path + 'registered_preview.zarr'
-    preview_tif_path = project_path + 'registered_preview.tif'
+    fixed_zarr_path = project_path + 'fixed/zarr_stack/1_1_1'
+    moving_zarr_path = project_path + 'moving/zarr_stack/1_1_1'
+    # registered_zarr_path = project_path + 'registered_affine.zarr'
+    # preview_zarr_path = project_path + 'registered_preview.zarr'
+    # preview_tif_path = project_path + 'registered_preview.tif'
 
     # Caching intermediate data
-    fixed_pts_path = project_path + 'fixed_pts.npy'
-    moving_pts_path = project_path + 'moving_pts.npy'
-    fixed_pts_img_path = project_path + 'fixed_pts.tif'
-    moving_pts_img_path = project_path + 'moving_pts.tif'
-    fixed_matches_img_path = project_path + 'fixed_matches.tif'
-    moving_matches_img_path = project_path + 'moving_matches.tif'
+    fixed_pts_path = project_path + 'fixed_blobs.npy'
+    moving_pts_path = project_path + 'moving_blobs_1200.npy'
+    # fixed_pts_img_path = project_path + 'fixed_pts.tif'
+    # moving_pts_img_path = project_path + 'moving_pts.tif'
+    # fixed_matches_img_path = project_path + 'fixed_matches.tif'
+    # moving_matches_img_path = project_path + 'moving_matches.tif'
     fixed_features_path = project_path + 'fixed_features.npy'
     moving_features_path = project_path + 'moving_features.npy'
-    fixed_idx_path = project_path + 'fixed_idx.npy'
-    moving_idx_path = project_path + 'moving_idx.npy'
+    # fixed_idx_path = project_path + 'fixed_idx.npy'
+    # moving_idx_path = project_path + 'moving_idx.npy'
 
     # Processing
-    nb_workers = 12
+    nb_workers = 48
     overlap = 8
 
     # Keypoints
@@ -650,22 +651,24 @@ def main():
 
     t0 = time.time()
 
-    print('opening input images')
-    fixed_img = zarr.open(fixed_zarr_path, mode='r')
-    moving_img = zarr.open(moving_zarr_path, mode='r')
+    # print('opening input images')
+    # fixed_store = zarr.NestedDirectoryStore(fixed_zarr_path)
+    # moving_store = zarr.NestedDirectoryStore(moving_zarr_path)
+    # fixed_img = zarr.open(fixed_store, mode='r')
+    # moving_img = zarr.open(moving_store, mode='r')
 
-    print('detecting keypoints')
-    t1 = time.time()
-    fixed_pts = detect_blobs_parallel(fixed_img, sigma, min_distance, min_intensity, nb_workers, overlap)
-    moving_pts = detect_blobs_parallel(moving_img, sigma, min_distance, min_intensity, nb_workers, overlap)
-    t2 = time.time()
-    print('  found {} keypoints in fixed image'.format(len(fixed_pts)))
-    print('  found {} keypoints in moving image'.format(len(moving_pts)))
-    print('  Took {0:.2f} seconds'.format(t2-t1))
-
-    print('saving blob locations')
-    np.save(fixed_pts_path, fixed_pts)
-    np.save(moving_pts_path, moving_pts)
+    # print('detecting keypoints')
+    # t1 = time.time()
+    # fixed_pts = detect_blobs_parallel(fixed_img, sigma, min_distance, min_intensity, nb_workers, overlap)
+    # moving_pts = detect_blobs_parallel(moving_img, sigma, min_distance, min_intensity, nb_workers, overlap)
+    # t2 = time.time()
+    # print('  found {} keypoints in fixed image'.format(len(fixed_pts)))
+    # print('  found {} keypoints in moving image'.format(len(moving_pts)))
+    # print('  Took {0:.2f} seconds'.format(t2-t1))
+    #
+    # print('saving blob locations')
+    # np.save(fixed_pts_path, fixed_pts)
+    # np.save(moving_pts_path, moving_pts)
 
     # print('saving blob images')
     # fixed_blob_arr = mark_pts(np.zeros(fixed_img.shape, dtype='uint8'), fixed_pts)
@@ -673,9 +676,11 @@ def main():
     # conversion.imsave(fixed_pts_img_path, fixed_blob_arr, compress=1)
     # conversion.imsave(moving_pts_img_path, moving_blob_arr, compress=1)
 
-    # print('loading precalculated keypoints')
-    # fixed_pts = np.load(fixed_pts_path)
-    # moving_pts = np.load(moving_pts_path)
+    print('loading precalculated keypoints')
+    fixed_pts = np.load(fixed_pts_path)
+    moving_pts = np.load(moving_pts_path)
+    fixed_pts_um = np.asarray(voxel_dimensions) * fixed_pts
+    moving_pts_um = np.asarray(voxel_dimensions) * moving_pts
 
     print('extracting features')
     t1 = time.time()
@@ -687,7 +692,7 @@ def main():
     print('saving features')
     np.save(fixed_features_path, fixed_features)
     np.save(moving_features_path, moving_features)
-    #
+
     # print('loading precalculated features')
     # fixed_features = np.load(fixed_features_path)
     # moving_features = np.load(moving_features_path)
@@ -1112,5 +1117,4 @@ def main():
 
 
 if __name__ == '__main__':
-    # main()
-    pass
+    main()
