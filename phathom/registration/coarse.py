@@ -270,7 +270,7 @@ def optimize(source, target, center=None, t0=None, theta0=None, niter=10):
 
     """
     if center is None:
-        center = center_mass(source)
+        center = center_mass(source)  # This might have to be center of the target (fixed image)
     if t0 is None:
         target_center = center_mass(target)
         t0 = target_center - center
