@@ -3,20 +3,23 @@ from itertools import product
 import numpy as np
 import zarr
 from numcodecs import Blosc
-from skimage.transform import downscale_local_mean
 from skimage.measure import block_reduce
-from skimage.util import pad
 import tqdm
 from phathom import utils
 
 
-def open(zarr_path):
-    return zarr.open(zarr_path)
+def open(zarr_path, mode='a', nested=True):
+    if nested:
+        store = zarr.NestedDirectoryStore(zarr_path)
+        return zarr.open(store, mode=mode)
+    else:
+        return zarr.open(zarr_path, mode=mode)
 
 
 def new_zarr(path, shape, chunks, dtype, **kwargs):
+    store = zarr.NestedDirectoryStore(path)
     compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)
-    z_arr_out = zarr.open(path,
+    z_arr_out = zarr.open(store,
                           mode='w',
                           shape=shape,
                           chunks=chunks,
@@ -24,7 +27,6 @@ def new_zarr(path, shape, chunks, dtype, **kwargs):
                           compressor=compressor,
                           **kwargs)
     return z_arr_out
-
 
 
 def write_subarray(data, z_arr, start):

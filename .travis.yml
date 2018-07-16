@@ -15,5 +15,4 @@ install:
    - pip install --progress-bar off nose
    - pip install --progress-bar off torch
 script:
-   - nosetests tests
-   - PHATHOM_MAPPER=MpiScatter PHATHOM_NODES=10 nosetests tests
+   - nosetests tests -s

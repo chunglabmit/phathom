@@ -1,4 +1,5 @@
-import skimage.external.tifffile as tifffile
+# import skimage.external.tifffile as tifffile
+import tifffile
 import multiprocessing
 import numpy as np
 
@@ -9,7 +10,7 @@ def imread(path):
     :param path: path to tif image to open
     :return: numpy ndarray with image data
     """
-    return tifffile.imread(files=path).astype(np.uint16)  # ADDED TYPE CAST
+    return tifffile.imread(files=path)
 
 
 def imsave(path, data, compress=1):
@@ -28,7 +29,7 @@ def imread_parallel(paths, nb_workers):
     :param paths: A list of tiff paths to read (order is preserved)
     :param nb_workers: An int indicating how many parallel processes to use
     """
-    img = imread(paths[0]).astype(np.uint16)  # ADDED TYPE CAST
+    img = imread(paths[0])
     with multiprocessing.Pool(nb_workers) as pool:
         data = np.array(pool.map(imread, paths), img.dtype)
     return data

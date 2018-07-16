@@ -8,3 +8,4 @@ zarr
 h5py
 tqdm
 pandas
+tifffile

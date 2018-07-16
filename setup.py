@@ -21,7 +21,8 @@ setup(
         "h5py",
         "tqdm",
         "scikit-learn",
-        "pandas"
+        "pandas",
+        "tifffile"
     ],
     author="Kwanghun Chung Lab",
     packages=["phathom",
