@@ -10,27 +10,18 @@ import tqdm
 from phathom import utils
 
 
-<<<<<<< HEAD
 def open(path, nested=True, mode='a'):
     if nested:
         store = zarr.NestedDirectoryStore(path)
         return zarr.open(store, mode=mode)
     else:
         return zarr.open(path, mode=mode)
-=======
-def open(zarr_path):
-    return zarr.open(zarr_path)
->>>>>>> refs/remotes/origin/master
 
 
 def new_zarr(path, shape, chunks, dtype, **kwargs):
     compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)
-<<<<<<< HEAD
     store = zarr.NestedDirectoryStore(path)
     z_arr_out = zarr.open(store,
-=======
-    z_arr_out = zarr.open(path,
->>>>>>> refs/remotes/origin/master
                           mode='w',
                           shape=shape,
                           chunks=chunks,
@@ -38,7 +29,6 @@ def new_zarr(path, shape, chunks, dtype, **kwargs):
                           compressor=compressor,
                           **kwargs)
     return z_arr_out
-
 
 
 def write_subarray(data, z_arr, start):

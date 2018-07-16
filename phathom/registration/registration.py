@@ -7,7 +7,6 @@ from skimage import feature, filters
 import multiprocessing
 from scipy.optimize import minimize, basinhopping, differential_evolution
 from scipy.ndimage import map_coordinates
-<<<<<<< HEAD
 from scipy import spatial
 from scipy.interpolate import Rbf, RegularGridInterpolator
 from skimage.external import tifffile
@@ -15,10 +14,6 @@ from skimage.filters import threshold_otsu
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
-=======
-from skimage.external import tifffile
-from skimage.filters import threshold_otsu
->>>>>>> refs/remotes/origin/master
 import tqdm
 import time
 from functools import partial
@@ -604,7 +599,6 @@ def register(moving_img, output_img, transformation, nb_workers, batch_size=None
         # pool.starmap(register_chunk, args_list)
 
 
-<<<<<<< HEAD
 def coherence(n_neighbors, fixed_pts_um, moving_pts_um):
     """Calculate the cosine similarity between displacement vectors using `n_neighbors`
     """
@@ -699,8 +693,6 @@ def interpolator(pts, interp):
     return np.column_stack([values_z, values_y, values_x])
 
 
-=======
->>>>>>> refs/remotes/origin/master
 def main():
     # Working directory
     # project_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/'

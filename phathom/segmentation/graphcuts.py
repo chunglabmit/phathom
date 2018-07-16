@@ -5,8 +5,8 @@ import phathom.utils as utils
 import tqdm
 from functools import partial
 import multiprocessing
-import warnings
-warnings.filterwarnings("error")
+# import warnings
+# warnings.filterwarnings("error")
 
 
 def poisson_pdf(x, mu):

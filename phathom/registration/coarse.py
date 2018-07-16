@@ -11,8 +11,6 @@ from scipy.ndimage.measurements import center_of_mass
 import tqdm
 from phathom.registration import pcloud
 from phathom import io
-# import neuroglancer
-# from nuggt.utils import ngutils
 
 
 def ncc(img1, img2, nonzero=False):
@@ -62,14 +60,11 @@ def mse(img1, img2):
     return np.mean((img1-img2)**2)
 
 
-<<<<<<< HEAD
 def mae(img1, img2):
     """Calculate the mean absolute error between two images"""
     return np.mean(np.abs(img1-img2))
 
 
-=======
->>>>>>> refs/remotes/origin/master
 def downsample_mean(img, factors):
     """Downsample an image by integer factors by averaging blocks
 
@@ -140,11 +135,7 @@ def rigid_warp(img, t, thetas, center, output_shape):
     r = pcloud.rotation_matrix(thetas)
     idx = np.indices(output_shape)
     pts = np.reshape(idx, (idx.shape[0], idx.size//idx.shape[0])).T
-<<<<<<< HEAD
-    warped_pts = rigid_transformation(t, r, pts, center)  # Warps fixed->moving, so center should be in fixed coords
-=======
     warped_pts = rigid_transformation(t, r, pts, center)
->>>>>>> refs/remotes/origin/master
     interp_values = map_coordinates(img, warped_pts.T)
     warped_img = np.reshape(interp_values, output_shape)
     return warped_img
@@ -250,10 +241,6 @@ def _registration_objective(x, source, target, center):
                                  center=center,
                                  output_shape=target.shape)
     return mse(target, transformed_img)
-<<<<<<< HEAD
-    # return mae(target, transformed_img)
-=======
->>>>>>> refs/remotes/origin/master
 
 
 def optimize(source, target, center=None, t0=None, theta0=None, niter=10):
@@ -286,17 +273,10 @@ def optimize(source, target, center=None, t0=None, theta0=None, niter=10):
 
     """
     if center is None:
-<<<<<<< HEAD
         center = center_mass(source)
     if t0 is None:
         target_center = center_mass(target)
-        t0 = center - target_center
-=======
-        center = center_mass(source)  # This might have to be center of the target (fixed image)
-    if t0 is None:
-        target_center = center_mass(target)
         t0 = target_center - center
->>>>>>> refs/remotes/origin/master
     if theta0 is None:
         theta0 = np.zeros_like(center)
     bounds = [(-s, s) for s in target.shape] + [(-np.pi, np.pi) for _ in range(3)]
@@ -346,7 +326,6 @@ def _scale_rigid_params(t, center, factors):
     return t*f, center*f
 
 
-<<<<<<< HEAD
 def coarse_registration(source, target, threshold, optimizer, min_size=10, use_hull=True):
     source_mask = threshold_img(source, threshold)
     target_mask = threshold_img(target, threshold)
@@ -364,22 +343,6 @@ def coarse_registration(source, target, threshold, optimizer, min_size=10, use_h
         target_edt = distance_transform(target_no_small)
 
     return optimize(source_edt, target_edt, **optimizer)
-=======
-def coarse_registration(source, target, threshold, opt_kwargs):
-    source_mask = threshold_img(source, threshold)
-    target_mask = threshold_img(target, threshold)
-
-    source_no_small = remove_small_objects(source_mask, min_size=10)
-    target_no_small = remove_small_objects(target_mask, min_size=10)
-
-    source_hull = convex_hull(source_no_small)
-    target_hull = convex_hull(target_no_small)
-
-    source_edt = distance_transform(source_hull)
-    target_edt = distance_transform(target_hull)
-
-    return optimize(source_edt, target_edt, **opt_kwargs)
->>>>>>> refs/remotes/origin/master
 
 
 def main():
