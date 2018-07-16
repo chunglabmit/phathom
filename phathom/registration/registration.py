@@ -7,8 +7,18 @@ from skimage import feature, filters
 import multiprocessing
 from scipy.optimize import minimize, basinhopping, differential_evolution
 from scipy.ndimage import map_coordinates
+<<<<<<< HEAD
+from scipy import spatial
+from scipy.interpolate import Rbf, RegularGridInterpolator
 from skimage.external import tifffile
 from skimage.filters import threshold_otsu
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+=======
+from skimage.external import tifffile
+from skimage.filters import threshold_otsu
+>>>>>>> refs/remotes/origin/master
 import tqdm
 import time
 from functools import partial
@@ -594,6 +604,103 @@ def register(moving_img, output_img, transformation, nb_workers, batch_size=None
         # pool.starmap(register_chunk, args_list)
 
 
+<<<<<<< HEAD
+def coherence(n_neighbors, fixed_pts_um, moving_pts_um):
+    """Calculate the cosine similarity between displacement vectors using `n_neighbors`
+    """
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors+1, algorithm='kd_tree', n_jobs=-1)
+    nbrs.fit(fixed_pts_um)
+    distances, indices = nbrs.kneighbors(fixed_pts_um)
+
+    cosine_similarity = np.zeros((fixed_pts_um.shape[0], n_neighbors))
+    for i, idxs in enumerate(indices):
+        displacement = moving_pts_um[i] - fixed_pts_um[i]
+
+        neighbor_idxs = idxs[1:]
+        fixed_neighbors = fixed_pts_um[neighbor_idxs]
+        moving_neighbors = moving_pts_um[neighbor_idxs]
+        displacement_neighbors = moving_neighbors - fixed_neighbors
+
+        for j, d in enumerate(displacement_neighbors):
+            cosine_similarity[i, j] = 1 - spatial.distance.cosine(displacement, d)
+
+    return cosine_similarity.mean(axis=-1)
+
+
+def match_distance(pts1, pts2):
+    """Calculate the distance between matches points"""
+    return np.linalg.norm(pts1-pts2, axis=-1)
+
+
+def fit_polynomial_transform(fixed_keypts, moving_keypts, degree):
+    """Fit a low-order polynomial mapping from fixed to moving keypoints"""
+    fixed_poly = PolynomialFeatures(degree=degree).fit_transform(fixed_keypts)
+    model_z = LinearRegression(fit_intercept=False).fit(fixed_poly,
+                                                        moving_keypts[:, 0])
+    model_y = LinearRegression(fit_intercept=False).fit(fixed_poly,
+                                                        moving_keypts[:, 1])
+    model_x = LinearRegression(fit_intercept=False).fit(fixed_poly,
+                                                        moving_keypts[:, 2])
+    return model_z, model_y, model_x
+
+
+def polynomial_transform(pts, degree, model_z, model_y, model_x):
+    """Apply a low-order polynomial transformation to pts"""
+    poly = PolynomialFeatures(degree=degree).fit_transform(pts)
+    transformed_keypts = np.empty_like(pts)
+    transformed_keypts[:, 0] = model_z.predict(poly)
+    transformed_keypts[:, 1] = model_y.predict(poly)
+    transformed_keypts[:, 2] = model_x.predict(poly)
+    return transformed_keypts
+
+
+def fit_rbf(affine_pts, moving_pts, smooth=0, mode='thin_plate'):
+    rbf_z = Rbf(affine_pts[:, 0], affine_pts[:, 1], affine_pts[:, 2], moving_pts[:, 0], smooth=smooth, function=mode)
+    rbf_y = Rbf(affine_pts[:, 0], affine_pts[:, 1], affine_pts[:, 2], moving_pts[:, 1], smooth=smooth, function=mode)
+    rbf_x = Rbf(affine_pts[:, 0], affine_pts[:, 1], affine_pts[:, 2], moving_pts[:, 2], smooth=smooth, function=mode)
+    return rbf_z, rbf_y, rbf_x
+
+
+def rbf_transform(pts, rbf_z, rbf_y, rbf_x):
+    zi = rbf_z(pts[:, 0], pts[:, 1], pts[:, 2])
+    yi = rbf_y(pts[:, 0], pts[:, 1], pts[:, 2])
+    xi = rbf_x(pts[:, 0], pts[:, 1], pts[:, 2])
+    return np.column_stack([zi, yi, xi])
+
+
+def nonrigid_transform(pts, affine_transform, rbf_z, rbf_y, rbf_x):
+    affine_pts = affine_transform(pts)
+    return rbf_transform(affine_pts, rbf_z, rbf_y, rbf_x)
+
+
+def warp_regular_grid(np_pts, z, y, x, transform):
+    Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
+    grid = np.column_stack([Z.ravel(), Y.ravel(), X.ravel()])
+    values = transform(grid)
+    grid_shape = values.shape[-1] * (np_pts,)  # If same # for each
+    values_z = np.reshape(values[:, 0], grid_shape)
+    values_y = np.reshape(values[:, 1], grid_shape)
+    values_x = np.reshape(values[:, 2], grid_shape)
+    return values_z, values_y, values_x
+
+
+def fit_grid_interpolator(z, y, x, values):
+    interp_z = RegularGridInterpolator((z, y, x), values[0])  # Could be useful to use map_coordinates here instead
+    interp_y = RegularGridInterpolator((z, y, x), values[1])
+    interp_x = RegularGridInterpolator((z, y, x), values[2])
+    return interp_z, interp_y, interp_x
+
+
+def interpolator(pts, interp):
+    interp_z, interp_y, interp_x = interp
+    values_z = interp_z(pts)
+    values_y = interp_y(pts)
+    values_x = interp_x(pts)
+    return np.column_stack([values_z, values_y, values_x])
+
+
+=======
+>>>>>>> refs/remotes/origin/master
 def main():
     # Working directory
     # project_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/'
