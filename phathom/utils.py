@@ -285,8 +285,11 @@ def pmap_chunks(f, arr, chunks=None, nb_workers=None):
         args_list.append(args)
 
     # TODO: fix this tqdm progbar. It's just displaying the list conversion progress
-    with multiprocessing.Pool(processes=nb_workers) as pool:
-        results = list(tqdm.tqdm(pool.starmap(f, args_list)))
+    if nb_workers > 1:
+        with multiprocessing.Pool(processes=nb_workers) as pool:
+            results = list(tqdm.tqdm(pool.starmap(f, args_list)))
+    else:
+        results = list(map(f, args_list))
 
     return results
 
