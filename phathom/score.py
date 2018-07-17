@@ -5,6 +5,7 @@ import numpy as np
 import json
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.kdtree import KDTree
+from lapsolver import solve_dense
 
 
 def precision(n_true_positive, n_false_positive):
@@ -145,7 +146,9 @@ def match_centroids(c1, c2, max_distance, inf=100000.):
     #
     # Run munkres algorithm to do assignment
     #
-    c1_result, c2_result = linear_sum_assignment(matrix)
+    # c1_result, c2_result = linear_sum_assignment(matrix)
+    c1_result, c2_result = solve_dense(matrix)  # lapsolver is much faster than scipy
+
     #
     # The return values: initially -1
     #
