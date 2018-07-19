@@ -73,4 +73,49 @@ def plot_densities(fixed, moving=None, registered=None, z=0, mip=False, clim=Non
         plt.imshow(registered_img, clim=clim)
         plt.show()
 
+# For registration
+
+def plot_correspondence(pts1, pts2, alpha=0.1):
+    for i in range(pts1.shape[-1]):
+        plt.subplot(1, pts1.shape[-1], i+1)
+        plt.scatter(pts1[:, i], pts2[:, i], alpha=alpha)
+    plt.show()
+
+
+def plot_hist(data, bins, xlim=None, ylim=None):
+    plt.hist(data, bins)
+    if xlim is not None:
+        plt.xlim(xlim)
+    if ylim is not None:
+        plt.ylim(ylim)
+    plt.show()
+
+
+def plot_overlay(img1, img2, clim1=None, clim2=None, figsize=None):
+    plt.figure(figsize=figsize)
+    plt.imshow(img1, cmap='Greens', clim=clim1)
+    plt.imshow(img2, cmap='Reds', alpha=0.5, clim=clim2)
+    plt.show()
+
+
+def plot_image(img, viewer, layer, shader):
+    with viewer.txn() as txn:
+        source = neuroglancer.LocalVolume(img.astype(np.float32))
+        txn.layers[layer] = neuroglancer.ImageLayer(source=source, shader=shader)
+
+
+def plot_fixed(fixed_img, viewer, normalization=1):
+    fixed_shader = ngutils.red_shader % (1 / normalization)
+    plot_image(fixed_img, viewer, 'fixed', fixed_shader)
+
+
+def plot_moving(moving_img, viewer, normalization=1):
+    moving_shader = ngutils.green_shader % (1 / normalization)
+    plot_image(moving_img, viewer, 'moving', moving_shader)
+
+
+def plot_both(fixed_img, moving_img, viewer, normalization=1):
+    plot_fixed(fixed_img, viewer, normalization)
+    plot_moving(moving_img, viewer, normalization)
+
 

@@ -548,6 +548,7 @@ def register_chunk(moving_img, chunks, output_img, transformation, start, batch_
                              moving_start[1]:moving_stop[1],
                              moving_start[2]:moving_stop[2]]
 
+    # TODO: No need to interpolate if the moving data is all zeros...
     # interpolate the moving data
     interp_values = interpolate(moving_data, moving_coords_local, order=1)
     interp_chunk = np.reshape(interp_values, chunk_shape)
