@@ -696,6 +696,29 @@ def interpolator(pts, interp):
     return np.column_stack([values_z, values_y, values_x])
 
 
+class MapCoordinatesInterpolator:
+
+    def __init__(self, values, shape, order=1):
+        self.values = values
+        self.shape = shape
+        self.order = order
+
+    def __call__(self, pts):
+        # pts must be (n, 3)
+        # scale pixel coordinates to grid coordinates
+        coords = tuple(pts[:, i]/(self.shape[i]-1)*(self.values.shape[i]-1) for i in range(pts.shape[-1]))
+        coords = np.asarray(coords)
+        results = map_coordinates(self.values, coords, order=self.order)
+        return results
+
+
+def fit_map_interpolator(values, shape, order=1):
+    interp_z = MapCoordinatesInterpolator(values[0], shape, order)
+    interp_y = MapCoordinatesInterpolator(values[1], shape, order)
+    interp_x = MapCoordinatesInterpolator(values[2], shape, order)
+    return interp_z, interp_y, interp_x
+
+
 def main():
     # Working directory
     # project_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/'
