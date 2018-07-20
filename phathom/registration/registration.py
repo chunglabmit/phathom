@@ -547,11 +547,13 @@ def register_chunk(moving_img, chunks, output_img, transformation, start, batch_
     moving_data = moving_img[moving_start[0]:moving_stop[0],
                              moving_start[1]:moving_stop[1],
                              moving_start[2]:moving_stop[2]]
-
-    # TODO: No need to interpolate if the moving data is all zeros...
-    # interpolate the moving data
-    interp_values = interpolate(moving_data, moving_coords_local, order=1)
-    interp_chunk = np.reshape(interp_values, chunk_shape)
+    
+    if not np.any(moving_data):
+        interp_chunk = np.zeros(chunk_shape, dtype=output_img.dtype)
+    else:
+        # interpolate the moving data
+        interp_values = interpolate(moving_data, moving_coords_local, order=1)
+        interp_chunk = np.reshape(interp_values, chunk_shape)
 
     # write results to disk
     output_img[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]] = interp_chunk
