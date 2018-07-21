@@ -737,17 +737,6 @@ def fit_map_interpolator(values, shape, order=1):
     return interp_z, interp_y, interp_x
 
 
-class TorchInterpolator:
-
-    def __init__(self, values):
-        self.values = torch.from_numpy(values).float()
-
-    def __call__(self, grid):
-        grid = torch.from_numpy(grid).float()
-        values = F.grid_sample(self.values, grid)
-        return values.numpy()
-
-
 def main2():
     import os
     import zarr

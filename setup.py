@@ -22,7 +22,8 @@ setup(
         "tqdm",
         "scikit-learn",
         "pandas",
-        "tifffile"
+        "tifffile",
+        "lapsolver"
     ],
     author="Kwanghun Chung Lab",
     packages=["phathom",
