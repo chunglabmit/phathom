@@ -2,7 +2,7 @@ import multiprocessing
 from itertools import product
 import numpy as np
 import zarr
-from numcodecs import Blosc
+from numcodecs import Blosc, Zstd
 from skimage.transform import downscale_local_mean
 from skimage.measure import block_reduce
 from skimage.util import pad
@@ -20,6 +20,7 @@ def open(path, nested=True, mode='a'):
 
 def new_zarr(path, shape, chunks, dtype, **kwargs):
     compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)
+    # compressor = Zstd(level=1)
     store = zarr.NestedDirectoryStore(path)
     z_arr_out = zarr.open(store,
                           mode='w',

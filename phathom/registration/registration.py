@@ -422,6 +422,9 @@ def mean_square_error(fixed, transformed):
     return np.mean(np.linalg.norm(a-b))
 
 
+transformation = None
+
+
 def register_slice(moving_img, zslice, output_shape, transformation, batch_size=None, padding=4):
     """Apply transformation and interpolate for a single z slice in the output
 
@@ -483,7 +486,7 @@ def register_slice(moving_img, zslice, output_shape, transformation, batch_size=
     return registered_img
 
 
-def register_chunk(moving_img, chunks, output_img, transformation, start, batch_size=None, padding=4):
+def register_chunk(moving_img, chunks, output_img, start, fixed_img, batch_size=None, padding=4):
     """Apply transformation and interpolate for a single chunk in the output
 
     Parameters
@@ -504,6 +507,10 @@ def register_chunk(moving_img, chunks, output_img, transformation, start, batch_
         number of pixels to borrow from adjacent chunks in `fixed_img`. Default, 4.
 
     """
+    global transformation
+
+    # zarr.blosc.use_threads = True
+
     # Get dimensions
     chunks = np.array(chunks)
     img_shape = np.array(output_img.shape)
@@ -512,14 +519,21 @@ def register_chunk(moving_img, chunks, output_img, transformation, start, batch_
     stop = np.minimum(start + chunks, img_shape)
     chunk_shape = np.array([b-a for a, b in zip(start, stop)])
 
+    # Check the target to see if we need to do anything
+    fixed_data = fixed_img[start[0]:stop[0],
+                           start[1]:stop[1],
+                           start[2]:stop[2]]
+    if not np.any(fixed_data):
+        output_img[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]] = np.zeros(chunk_shape, output_img.dtype)
+        return
+
     # Find all global coordinates in the fixed image for this chunk
     local_coords = shape_to_coordinates(chunk_shape)
     global_coords = start + local_coords
 
     # Find the coordinates on the moving image to be interpolated
-    # TODO: Figure out why this is slow
     if batch_size is None:
-        moving_coords = transformation(pts=global_coords)
+        moving_coords = transformation(pts=global_coords)  # This is using multiple cores
     else:
         moving_coords = np.empty_like(global_coords)
         nb_pts = len(global_coords)
@@ -536,34 +550,35 @@ def register_chunk(moving_img, chunks, output_img, transformation, start, batch_
     transformed_start = tuple(np.floor(moving_coords.min(axis=0)-padding).astype('int'))
     transformed_stop = tuple(np.ceil(moving_coords.max(axis=0)+padding).astype('int'))
 
-    # Read in the available portion data (not indexing outside the moving image boundary)
-    moving_start = tuple(max(0, s) for s in transformed_start)
-    moving_stop = tuple(min(e, s) for e, s in zip(moving_img.shape, transformed_stop))
-    moving_coords_local = moving_coords - np.array(moving_start)
-
-    # moving_data = np.zeros(tuple((np.array(moving_stop)-
-    #                               np.array(moving_start)).astype('int')))
-
-    moving_data = moving_img[moving_start[0]:moving_stop[0],
-                             moving_start[1]:moving_stop[1],
-                             moving_start[2]:moving_stop[2]]
-    
-    if not np.any(moving_data):
-        interp_chunk = np.zeros(chunk_shape, dtype=output_img.dtype)
+    if np.any(np.asarray(transformed_stop) < 0):  # Chunk is outside for some dimension
+        interp_chunk = np.zeros(chunk_shape, output_img.dtype)
+    elif np.any(np.greater(np.asarray(transformed_start), np.asarray(output_img.shape))): # Chunk is outside
+        interp_chunk = np.zeros(chunk_shape, output_img.dtype)
     else:
-        # interpolate the moving data
-        interp_values = interpolate(moving_data, moving_coords_local, order=1)
-        interp_chunk = np.reshape(interp_values, chunk_shape)
+        # Read in the available portion data (not indexing outside the moving image boundary)
+        moving_start = tuple(max(0, s) for s in transformed_start)
+        moving_stop = tuple(min(e, s) for e, s in zip(moving_img.shape, transformed_stop))
+        moving_coords_local = moving_coords - np.array(moving_start)
+        moving_data = moving_img[moving_start[0]:moving_stop[0],
+                                 moving_start[1]:moving_stop[1],
+                                 moving_start[2]:moving_stop[2]]
+        if not np.any(moving_data):  # No need to interpolate if moving image is just zeros
+            interp_chunk = np.zeros(chunk_shape, dtype=output_img.dtype)
+        else:
+            # interpolate the moving data
+            interp_values = interpolate(moving_data, moving_coords_local, order=1)
+            interp_chunk = np.reshape(interp_values, chunk_shape)
 
     # write results to disk
     output_img[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]] = interp_chunk
 
 
-def _register_chunk(arr, start_coord, chunks, moving_img, transformation, batch_size, padding):
-    register_chunk(moving_img, chunks, arr, transformation, start_coord, batch_size, padding)
+def _register_chunk(args):
+    arr, start_coord, chunks, moving_img, fixed_img, batch_size, padding = args
+    register_chunk(moving_img, chunks, arr, start_coord, fixed_img, batch_size, padding)
 
 
-def register(moving_img, output_img, transformation, nb_workers, batch_size=None, padding=4):
+def register(moving_img, output_img, fixed_img, transform_path, nb_workers, batch_size=None, padding=4):
     """Transform a moving zarr array for registration
 
     Parameters
@@ -582,24 +597,30 @@ def register(moving_img, output_img, transformation, nb_workers, batch_size=None
         number of pixels to borrow from adjacent chunks in `fixed_img`. Default, 4.
 
     """
-    # start_coords = chunk_coordinates(fixed_img.shape, fixed_img.chunks)
-    # args_list = []
-    # for i, start_coord in enumerate(start_coords):
-    #     start = np.asarray(start_coord)
-    #     args = (moving_img, fixed_img, output_img, transformation, start, batch_size, padding)
-    #     args_list.append(args)
+    global transformation
 
-    f = partial(_register_chunk,
-                moving_img=moving_img,
-                transformation=transformation,
-                batch_size=batch_size,
-                padding=padding)
+    # Get transformation
+    transformation = utils.pickle_load(transform_path)
 
-    utils.pmap_chunks(f, output_img, output_img.chunks, nb_workers)
+    start_coords = chunk_coordinates(output_img.shape, output_img.chunks)
+    args_list = []
+    for i, start_coord in tqdm.tqdm(enumerate(start_coords)):
+        start = np.asarray(start_coord)
+        # args = (moving_img, output_img.chunks, output_img, start, batch_size, padding)
+        args = (output_img, start, output_img.chunks, moving_img, fixed_img, batch_size, padding)
+        args_list.append(args)
+        # register_chunk(*args)
 
-    # with multiprocessing.Pool(processes=nb_workers) as pool:
-    #     list(tqdm.tqdm(pool.imap(_register_chunk, args_list)))
-        # pool.starmap(register_chunk, args_list)
+    with multiprocessing.Pool(processes=nb_workers) as pool:
+        list(tqdm.tqdm(pool.imap_unordered(_register_chunk, args_list), total=len(args_list)))
+
+    # f = partial(_register_chunk,
+    #             moving_img=moving_img,
+    #             batch_size=batch_size,
+    #             padding=padding)
+    #
+    # utils.pmap_chunks(f, output_img, output_img.chunks, nb_workers)
+
 
 
 def coherence(n_neighbors, fixed_pts_um, moving_pts_um):
@@ -717,6 +738,53 @@ def fit_map_interpolator(values, shape, order=1):
     interp_y = MapCoordinatesInterpolator(values[1], shape, order)
     interp_x = MapCoordinatesInterpolator(values[2], shape, order)
     return interp_z, interp_y, interp_x
+
+
+def main2():
+    import os
+    import zarr
+    from precomputed_tif.zarr_stack import ZarrStack
+    from phathom import io
+    from phathom.utils import pickle_load
+
+    working_dir = '/home/jswaney/coregistration'
+
+    # Open images
+    fixed_zarr_path = 'fixed/zarr_stack/1_1_1'
+    moving_zarr_path = 'moving/zarr_stack/1_1_1'
+
+    fixed_img = io.zarr.open(os.path.join(working_dir, fixed_zarr_path),
+                             mode='r')
+    moving_img = io.zarr.open(os.path.join(working_dir, moving_zarr_path),
+                              mode='r')
+
+    # Load the coordinate interpolator
+    interpolator_path = 'map_interpolator.pkl'
+
+    interpolator = pickle_load(os.path.join(working_dir,
+                                            interpolator_path))
+
+    # Create a new zarr array for the registered image
+    nonrigid_zarr_path = 'moving/registered/1_1_1'
+
+    nonrigid_img = io.zarr.new_zarr(os.path.join(working_dir,
+                                                 nonrigid_zarr_path),
+                                    fixed_img.shape,
+                                    fixed_img.chunks,
+                                    fixed_img.dtype)
+
+    # Warp the entire moving image
+    nb_workers = 1
+    batch_size = None
+    padding = 2
+
+    register(moving_img,
+             nonrigid_img,
+             fixed_img,
+             os.path.join(working_dir, interpolator_path),
+             nb_workers,
+             batch_size=batch_size,
+             padding=padding)
 
 
 def main():
@@ -1242,4 +1310,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main2()
