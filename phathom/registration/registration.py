@@ -14,6 +14,8 @@ from skimage.filters import threshold_otsu
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
+import torch
+import torch.nn.functional as F
 import tqdm
 import time
 from functools import partial
@@ -375,11 +377,6 @@ def shape_to_coordinates(shape):
     indices = np.indices(shape)
     coords = indices.reshape((indices.shape[0], np.prod(indices.shape[1:]))).T
     return coords
-    # z_idx = indices[0].flatten()
-    # y_idx = indices[1].flatten()
-    # x_idx = indices[2].flatten()
-    # return np.column_stack((z_idx, y_idx, x_idx))
-    # return np.array([z_idx, y_idx, x_idx]).T
 
 
 def interpolate(image, coordinates, order=3):
@@ -717,6 +714,17 @@ def fit_map_interpolator(values, shape, order=1):
     interp_y = MapCoordinatesInterpolator(values[1], shape, order)
     interp_x = MapCoordinatesInterpolator(values[2], shape, order)
     return interp_z, interp_y, interp_x
+
+
+class TorchInterpolator:
+
+    def __init__(self, values):
+        self.values = torch.from_numpy(values).float()
+
+    def __call__(self, grid):
+        grid = torch.from_numpy(grid).float()
+        values = F.grid_sample(self.values, grid)
+        return values.numpy()
 
 
 def main():
