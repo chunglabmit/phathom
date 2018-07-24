@@ -14,8 +14,6 @@ from skimage.filters import threshold_otsu
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.linear_model import LinearRegression
-import torch
-import torch.nn.functional as F
 import tqdm
 import time
 from functools import partial
@@ -750,22 +748,18 @@ def main2():
     fixed_zarr_path = 'fixed/zarr_stack/1_1_1'
     moving_zarr_path = 'moving/zarr_stack/1_1_1'
 
-    fixed_img = io.zarr.open(os.path.join(working_dir, fixed_zarr_path),
-                             mode='r')
-    moving_img = io.zarr.open(os.path.join(working_dir, moving_zarr_path),
-                              mode='r')
+    fixed_img = io.zarr.open(os.path.join(working_dir, fixed_zarr_path), mode='r')
+    moving_img = io.zarr.open(os.path.join(working_dir, moving_zarr_path), mode='r')
 
     # Load the coordinate interpolator
     interpolator_path = 'map_interpolator.pkl'
 
-    interpolator = pickle_load(os.path.join(working_dir,
-                                            interpolator_path))
+    interpolator = pickle_load(os.path.join(working_dir, interpolator_path))
 
     # Create a new zarr array for the registered image
     nonrigid_zarr_path = 'moving/registered/1_1_1'
 
-    nonrigid_img = io.zarr.new_zarr(os.path.join(working_dir,
-                                                 nonrigid_zarr_path),
+    nonrigid_img = io.zarr.new_zarr(os.path.join(working_dir, nonrigid_zarr_path),
                                     fixed_img.shape,
                                     fixed_img.chunks,
                                     fixed_img.dtype)
@@ -1052,258 +1046,6 @@ def main():
     #
     # t3 = time.time()
     # print('Total time: {0:.2f} seconds'.format(t3-t0))
-
-# ###################################
-# # Cached results
-# fixed_pts_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/fixed_pts.npy'
-# moving_pts_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/moving_pts.npy'
-# fixed_features_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/fixed_features.npy'
-# moving_features_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/moving_features.npy'
-#
-# fixed_pts = np.load(fixed_pts_path)
-# moving_pts = np.load(moving_pts_path)
-# fixed_feat = np.load(fixed_features_path)
-# moving_feat = np.load(moving_features_path)
-# print('keypoints:', fixed_pts.shape, moving_pts.shape)
-# print('features:', fixed_feat.shape, moving_feat.shape)
-#
-#
-# import pickle
-#
-#
-# def open_dict(filename):
-#     with open(filename, 'rb') as handle:
-#         data = pickle.load(handle)
-#     return data
-#
-#
-# transformation_dict = open_dict('/media/jswaney/Drive/Justin/coregistration/whole_brain/transformation.pkl')
-#
-# t = transformation_dict['t']
-# center = transformation_dict['center']
-# theta = transformation_dict['theta']
-#
-# print("Translation (px):", t)
-# print("Rotation center (px):", center)
-# print("Anlges (rad):", theta)
-#
-#
-# from phathom.registration import pcloud, coarse
-# from functools import partial
-#
-# r = pcloud.rotation_matrix(theta)
-# transformation = partial(coarse.rigid_transformation,
-#                          t=t,
-#                          r=r,
-#                          center=center)
-#
-# nb_pts = 1000
-#
-# transformed_pts = transformation(pts=fixed_pts)
-# transformed_idx = np.random.choice(np.arange(fixed_pts.shape[0]), nb_pts)
-# moving_idx = np.random.choice(np.arange(moving_pts.shape[0]), nb_pts)
-#
-# idx_fixed_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/idx_fixed2.npy'
-# idx_moving_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/idx_moving2.npy'
-#
-# idx_fixed = np.load(idx_fixed_path)
-# idx_moving = np.load(idx_moving_path)
-# print('# matches loaded:', idx_fixed.shape[0])
-#
-# nb_pts = 1000
-#
-# transformed_pts = transformation(pts=fixed_pts)
-# transformed_idx = np.random.choice(np.arange(fixed_pts.shape[0]), nb_pts)
-# moving_idx = np.random.choice(np.arange(moving_pts.shape[0]), nb_pts)
-#
-# voxel_dimensions = (2.0, 1.6, 1.6)
-#
-# fixed_keypoints_um = fixed_pts[idx_fixed] * np.asarray(voxel_dimensions)
-# moving_keypoints_um = moving_pts[idx_moving] * np.asarray(voxel_dimensions)
-#
-# from sklearn.neighbors import NearestNeighbors
-# from scipy import spatial
-#
-# n_neighbors = 3
-# min_similarity = 0.99
-#
-# nbrs = NearestNeighbors(n_neighbors=n_neighbors + 1, algorithm='kd_tree', n_jobs=-1)
-# nbrs.fit(fixed_keypoints_um)
-# distances, indices = nbrs.kneighbors(fixed_keypoints_um)
-#
-# cosine_similarity = np.zeros((idx_fixed.shape[0], n_neighbors))
-# for i, idxs in enumerate(indices):
-#     displacement = moving_keypoints_um[i] - fixed_keypoints_um[i]
-#
-#     neighbor_idxs = idxs[1:]
-#     fixed_neighbors = fixed_keypoints_um[neighbor_idxs]
-#     moving_neighbors = moving_keypoints_um[neighbor_idxs]
-#     displacement_neighbors = moving_neighbors - fixed_neighbors
-#
-#     for j, d in enumerate(displacement_neighbors):
-#         cosine_similarity[i, j] = 1 - spatial.distance.cosine(displacement, d)
-#
-# coherence = cosine_similarity.mean(axis=-1)
-#
-# inlier_idx = np.where(coherence > min_similarity)
-# outlier_idx = np.where(coherence <= min_similarity)
-#
-# fixed_keypoints_um = fixed_keypoints_um[inlier_idx]
-# moving_keypoints_um = moving_keypoints_um[inlier_idx]
-#
-# print('Average coherence: {}'.format(coherence.mean()))
-# print('Found {} outliers'.format(len(coherence) - len(inlier_idx[0])))
-#
-# resid_thresh = None
-# min_samples = 20
-#
-# ransac, ransac_inliers = pcloud.estimate_affine(fixed_pts[idx_fixed[inlier_idx]],
-#                                                 moving_pts[idx_moving[inlier_idx]],
-#                                                 min_samples=min_samples,
-#                                                 residual_threshold=resid_thresh)
-#
-#
-# affine_keypoints = pcloud.register_pts(fixed_pts[idx_fixed[inlier_idx]], ransac)
-# affine_keypoints_um = affine_keypoints * np.asarray(voxel_dimensions)
-#
-# nonrigid_residuals = np.linalg.norm(affine_keypoints_um-moving_keypoints_um,
-#                                     axis=-1)
-# ave_resid_nonrigid = np.mean(nonrigid_residuals)
-# print(ave_resid_nonrigid)
-#
-# max_distance = 50
-#
-# distance_inlier_idx = np.where(nonrigid_residuals < max_distance)
-# fixed_keypoints_dist = fixed_pts[idx_fixed[inlier_idx]][distance_inlier_idx]
-# moving_keypoints_dist = moving_pts[idx_moving[inlier_idx]][distance_inlier_idx]
-# fixed_keypoints_dist_um = fixed_keypoints_dist * np.asarray(voxel_dimensions)
-# moving_keypoints_dist_um = moving_keypoints_dist * np.asarray(voxel_dimensions)
-#
-# ransac, ransac_inliers = pcloud.estimate_affine(fixed_keypoints_dist,
-#                                                 moving_keypoints_dist,
-#                                                 min_samples=min_samples,
-#                                                 residual_threshold=resid_thresh)
-#
-# affine_keypoints_dist = pcloud.register_pts(fixed_keypoints_dist, ransac)
-# affine_keypoints_dist_um = affine_keypoints_dist * np.asarray(voxel_dimensions)
-#
-# # sklearn uses threading
-# from sklearn.preprocessing import PolynomialFeatures
-# from sklearn.linear_model import LinearRegression
-#
-#
-# degree = 1
-#
-#
-# def fit_polynomial_transform(fixed_keypts, moving_keypts, degree):
-#     fixed_poly = PolynomialFeatures(degree=degree).fit_transform(fixed_keypts)
-#     model_z = LinearRegression(fit_intercept=False).fit(fixed_poly,
-#                                                         moving_keypts[:, 0])
-#     model_y = LinearRegression(fit_intercept=False).fit(fixed_poly,
-#                                                         moving_keypts[:, 1])
-#     model_x = LinearRegression(fit_intercept=False).fit(fixed_poly,
-#                                                         moving_keypts[:, 2])
-#     return model_z, model_y, model_x
-#
-#
-# def polynomial_transform(pts, degree, model_z, model_y, model_x):
-#     poly = PolynomialFeatures(degree=degree).fit_transform(pts)
-#     transformed_keypts = np.empty_like(pts)
-#     transformed_keypts[:, 0] = model_z.predict(poly)
-#     transformed_keypts[:, 1] = model_y.predict(poly)
-#     transformed_keypts[:, 2] = model_x.predict(poly)
-#     return transformed_keypts
-#
-#
-# model_z, model_y, model_x = fit_polynomial_transform(fixed_keypoints_dist,
-#                                                      moving_keypoints_dist,
-#                                                      degree)
-#
-# affine_transformation = partial(polynomial_transform,
-#                                   degree=degree,
-#                                   model_z=model_z,
-#                                   model_y=model_y,
-#                                   model_x=model_x)
-#
-# from phathom import io
-# from mba import mba3
-#
-#
-# fixed_zarr_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/fixed.zarr'
-#
-# fixed_img = io.zarr.open(fixed_zarr_path)
-#
-# cmin = np.zeros(3)
-# cmax = np.array(fixed_img.shape)
-# coo = affine_keypoints_dist.copy()  # affine(fixed_keypoints_dist)
-# val_z = moving_keypoints_dist[:, 0].copy()
-# val_y = moving_keypoints_dist[:, 1].copy()
-# val_x = moving_keypoints_dist[:, 2].copy()
-#
-# m0 = 3
-#
-# interp_z = mba3(cmin, cmax, [m0, m0, m0], coo, val_z)
-# interp_y = mba3(cmin, cmax, [m0, m0, m0], coo, val_y)
-# interp_x = mba3(cmin, cmax, [m0, m0, m0], coo, val_x)
-#
-# pred_z = interp_z(affine_keypoints_dist.copy())
-# pred_y = interp_y(affine_keypoints_dist.copy())
-# pred_x = interp_x(affine_keypoints_dist.copy())
-#
-# nonrigid_keypoints_dist = np.column_stack([pred_z, pred_y, pred_x])
-#
-#
-# def nonrigid_transform(pts):
-#     affine_pts = affine_transformation(pts)
-#     affine_pts = affine_pts.copy()
-#     zi = interp_z(affine_pts)
-#     yi = interp_y(affine_pts)
-#     xi = interp_x(affine_pts)
-#     return np.column_stack([zi, yi, xi])
-#
-#
-# import zarr
-# import numcodecs
-# from numcodecs import Blosc
-#
-#
-# moving_zarr_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/moving.zarr'
-#
-# moving_img = io.zarr.open(moving_zarr_path)
-#
-# nb_workers = 1
-# batch_size = None  # 10000
-#
-# output_zarr_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain/nonrigid.zarr'
-#
-# nonrigid_img = zarr.open(output_zarr_path,
-#                          mode='w',
-#                          shape=fixed_img.shape,
-#                          chunks=fixed_img.chunks,
-#                          dtype=fixed_img.dtype,
-#                          compressor=Blosc(cname='zstd',
-#                                           clevel=1,
-#                                           shuffle=Blosc.BITSHUFFLE))
-#
-# padding = 4
-#
-# start_coords = chunk_coordinates(fixed_img.shape, fixed_img.chunks)
-# args_list = []
-# for i, start_coord in enumerate(start_coords):
-#     start = np.asarray(start_coord)
-#     args = (moving_img, fixed_img.chunks, nonrigid_img, transformation, start, batch_size, padding)
-#     args_list.append(args)
-#
-# # For profiling (somehow this is much faster than starmap with a pool
-# for args in args_list:
-#     register_chunk(*args)
-
-# register(moving_img,
-#          fixed_img,
-#          nonrigid_img,
-#          nonrigid_transform,
-#          nb_workers,
-#          batch_size)
 
 
 if __name__ == '__main__':
