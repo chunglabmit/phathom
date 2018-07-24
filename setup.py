@@ -24,7 +24,6 @@ setup(
         "pandas",
         "tifffile",
         "lapsolver",
-        "pytorch"
     ],
     author="Kwanghun Chung Lab",
     packages=["phathom",
