@@ -10,3 +10,4 @@ tqdm
 pandas
 tifffile
 lapsolver
+pytorch
