@@ -166,4 +166,22 @@ def remove_random_points(points, amount):
     return sample
 
 
+def generate_random_noise(shape, clim):
+    """Generate an image of random noise scaled within `clim` bounds
 
+    Parameters
+    ----------
+    shape : tuple
+        shape of the noise image
+    clim : array-like
+        (2,) array of with the minimum and maximum values possible in the random noise
+
+    Returns
+    -------
+    noise : ndarray
+        output noise array
+
+    """
+    if len(clim) != 2:
+        raise ValueError('clim must contain a minimum and maximum value')
+    return np.random.rand(*shape) * (clim[1] - clim[0]) + clim[0]
