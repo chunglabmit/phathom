@@ -70,16 +70,18 @@ def remove_background(image, threshold):
     return image * mask
 
 
-def preprocess(tif_path, output_path, threshold, kernel_size):
+def preprocess(tif_path, output_path, threshold=None, kernel_size=127):
     img = io.tiff.imread(tif_path)
-    # img_max = img.max()
-    # img_min = img.min()
-    # enhanced_normalized = clahe_2d(img, kernel_size)
-    # enhanced = enhanced_normalized * (img_max - img_min) + img_min
-    # mask = (enhanced >= threshold)
-    # output = enhanced # * mask
-    output = remove_background(img, threshold)
-    io.tiff.imsave(output_path, output.astype('float32'), compress=1)
+    img_max = img.max()
+    img_min = img.min()
+    enhanced_normalized = clahe_2d(img, kernel_size)
+    enhanced = enhanced_normalized * (img_max - img_min) + img_min
+    output = enhanced
+    # if threshold is not None:
+    # mask = (img >= threshold)
+    # output = enhanced * mask
+    # output = remove_background(img, threshold)
+    io.tiff.imsave(output_path, output.astype(img.dtype), compress=1)
 
 
 def main():
