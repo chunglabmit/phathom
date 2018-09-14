@@ -243,7 +243,7 @@ def eigen3(A):
     return eig1, eig2, eig3
 
 
-def eigvals_of_weingarten(x, ew_block_size=200):
+def eigvals_of_weingarten(x, ew_block_size=64):
     """Find the eigenvalues of the weingarten operator
 
     :param x: an NxMxP 3D array
