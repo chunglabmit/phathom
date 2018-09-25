@@ -10,7 +10,8 @@ before_install:
 
 install:
    - pip install --upgrade pip
-   - pip install --no-cache-dir scikit-image
+   - pip install Cython>=0.23
+   - pip install --no-binary scikit-image scikit-image
    - pip install --progress-bar off -r requirements.txt
    - pip install --progress-bar off --editable .
    - pip install --progress-bar off nose
