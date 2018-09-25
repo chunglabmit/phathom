@@ -15,4 +15,5 @@ install:
    - pip install --progress-bar off nose
    - pip install --progress-bar off torch
 script:
+   - python -c "import phathom.segmentation.segmentation"
    - nosetests tests -s -v
