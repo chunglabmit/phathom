@@ -10,9 +10,10 @@ before_install:
 
 install:
    - pip install --upgrade pip
-   - pip freeze
-   - python -c "import numpy;print(numpy.__file__)"
+   - pip uninstall numpy
    - pip install --progress-bar off -r requirements.txt
+   - python -c "import numpy;print(numpy.__file__)"
+   - pip freeze | grep numpy
    - pip install --progress-bar off --editable .
    - pip install --progress-bar off nose
    - pip install --progress-bar off torch
