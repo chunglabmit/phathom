@@ -10,10 +10,10 @@ before_install:
 
 install:
    - pip install --upgrade pip
+   - pip install --progress-bar off scikit-image
    - pip install --progress-bar off -r requirements.txt
    - pip install --progress-bar off --editable .
    - pip install --progress-bar off nose
    - pip install --progress-bar off torch
 script:
-   - python -c "import phathom.segmentation.segmentation"
    - nosetests tests -s -v
