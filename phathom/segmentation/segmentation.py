@@ -3,10 +3,11 @@ from phathom.segmentation import graphcuts
 from phathom import utils
 from phathom.io import conversion as imageio
 import argparse
+import itertools
 import numpy as np
 import scipy.ndimage as ndi
 import skimage
-from skimage import segmentation, feature, morphology, filters, exposure, transform, measure
+from skimage import feature, morphology, filters, exposure, transform, measure
 from skimage.filters import gaussian
 import multiprocessing
 from functools import partial
@@ -209,6 +210,77 @@ def otsu_threshold(freq):
 
 def mean_threshold(freq):
     return np.sum(np.arange(len(freq)) * freq) / np.sum(freq)
+
+
+def adaptive_threshold(img,
+                       method=filters.threshold_otsu,
+                       low_threshold=np.finfo(np.float32).min,
+                       high_threshold=np.finfo(np.float32).max,
+                       sigma=1,
+                       blocksize=50):
+    """Derive an adaptive threshold for each voxel
+
+    Apply the method in blocks, smooth the result, then zoom the resulting grid
+
+    :param img: The image to estimate threshold
+    :param method: the thresholding method, a function that returns a threshold
+    default is otsu_threshold
+    :param low_threshold: Only take voxels with intensities above the
+    low threshold. Default is everything
+    :param high_threshold: Only take voxels with intensities below the
+    high threshold. Default is everything.
+    :param sigma: Smooth the resulting grid by this sigma. Can be a constant
+    or 3-tuple
+    :param blocksize: The size of the blocks. Can be a constant or a 3-tuple
+    :return: a similarly sized threshold per voxel
+    """
+    if np.isscalar(blocksize):
+        blocksize = (blocksize, blocksize, blocksize)
+    if np.isscalar(sigma):
+        sigma = (sigma, sigma, sigma)
+    grid_z, grid_y, grid_x = [
+        np.linspace(
+            0, img.shape[idx],
+            1 + int((img.shape[idx] + blocksize[idx] - 1) / blocksize[idx]))
+        .astype(int)
+        for idx in range(3)]
+    sz, sy, sx = [len(grid) - 1 for grid in (grid_z, grid_y, grid_x)]
+    threshold_grid = np.zeros((sz, sy, sx), img.dtype)
+    for xi, yi, zi in itertools.product(range(sx), range(sy), range(sz)):
+        (x0, x1), (y0, y1), (z0, z1) = [
+            (grid[idx], grid[idx+1])
+            for grid, idx in ((grid_x, xi), (grid_y, yi), (grid_z, zi))]
+        block = img[z0:z1, y0:y1, x0:x1]
+        block = block[(block >= low_threshold) & (block < high_threshold)]
+        if len(block) == 0:
+            if np.all(block < low_threshold):
+                threshold_grid[zi, yi, xi] = low_threshold
+            else:
+                threshold_grid[zi, yi, xi] = high_threshold
+        else:
+            try:
+                threshold_grid[zi, yi, xi] = method(block)
+            except ValueError:
+                # Otsu gets here if all the same
+                # Set the threshold just above the value.
+                if np.all(block == block[0]):
+                    threshold_grid[zi, yi, xi] = \
+                        block[0] + np.finfo(block.dtype).eps
+                else:
+                    raise
+    if np.any(sigma) > 0:
+        threshold_grid = gaussian(threshold_grid, sigma)
+    output = np.ones_like(img)
+    zzi = np.linspace(-.5, threshold_grid.shape[0]-.5, img.shape[0])\
+        .reshape(img.shape[0], 1, 1)
+    yyi = np.linspace(-.5, threshold_grid.shape[1]-.5, img.shape[1])\
+        .reshape(1, img.shape[1], 1)
+    xxi = np.linspace(-.5, threshold_grid.shape[2]-.5, img.shape[2])\
+        .reshape(1, 1, img.shape[2])
+    zz, yy, xx = [output * _ for _ in (zzi, yyi, xxi)]
+    ndi.map_coordinates(threshold_grid, (zz, yy, xx), output=output,
+                        mode="nearest")
+    return output
 
 
 def calculate_seeds(eigvals, mask, h):
