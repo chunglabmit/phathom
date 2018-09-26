@@ -269,7 +269,7 @@ def adaptive_threshold(img,
                 else:
                     raise
     if np.any(sigma) > 0:
-        threshold_grid = gaussian(threshold_grid, sigma)
+        threshold_grid = ndi.gaussian_filter(threshold_grid, sigma)
     output = np.ones_like(img)
     zzi = np.linspace(-.5, threshold_grid.shape[0]-.5, img.shape[0])\
         .reshape(img.shape[0], 1, 1)

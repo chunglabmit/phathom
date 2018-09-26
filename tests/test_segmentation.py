@@ -49,3 +49,9 @@ class TestAdaptiveThreshold(unittest.TestCase):
         t = pss.adaptive_threshold(a, high_threshold=.4)
         np.testing.assert_array_less(t, .4)
 
+    def test_gt_1(self):
+        # skimage.filters.gaussian wants values between -1 and 1
+        # and throws an exception. Regression test this.
+        a = np.random.RandomState(1234).uniform(size=(100, 100, 100)) + 2
+        t = pss.adaptive_threshold(a)
+        self.assertTrue(np.max(a) >= 2)
