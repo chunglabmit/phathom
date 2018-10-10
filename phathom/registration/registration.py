@@ -20,7 +20,6 @@ from functools import partial
 from phathom import utils
 from phathom.registration import pcloud
 from phathom.io import conversion
-from phathom import plotting
 
 
 def chunk_coordinates(shape, chunks):
