@@ -231,7 +231,8 @@ def segment_nuclei(image, mask, sigma, h):
         foreground mask
     sigma : float or tuple
         amount to smooth the image
-    h : int
+    h : float
+        non-maximum suppression amount
 
     Returns
     -------

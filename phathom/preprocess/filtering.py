@@ -84,6 +84,23 @@ def preprocess(tif_path, output_path, threshold=None, kernel_size=127):
     io.tiff.imsave(output_path, output.astype(img.dtype), compress=1)
 
 
+def preprocess_batch(path_to_tifs, output_path, threshold=None, kernel_size=127, nb_workers=None):
+    if nb_workers is None:
+        nb_workers = multiprocessing.cpu_count()
+
+    paths, filenames = tifs_in_dir(path_to_tifs)
+    output_abspath = make_dir(output_path)
+
+    args_list = []
+    for path, filename in zip(paths, filenames):
+        output_path = os.path.join(output_abspath, filename)
+        args = (path, output_path, threshold, kernel_size)
+        args_list.append(args)
+
+    with multiprocessing.Pool(nb_workers) as pool:
+        pool.starmap(preprocess, args_list)
+
+
 def main():
     path_to_tifs = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/fixed/processed_tiffs'
     output_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/fixed/processed_tiffs2'
