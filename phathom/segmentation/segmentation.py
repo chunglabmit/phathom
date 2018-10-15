@@ -118,8 +118,10 @@ def positive_curvatures(eigvals):
     return pos_curv
 
 
-def seed_probability(eigen_seeds):
-    return 1-np.exp(-eigen_seeds**2/(2*eigen_seeds.std()**2))
+def seed_probability(eigen_seeds, stdev=None):
+    if stdev is None:
+        stdev = eigen_seeds.std()
+    return 1-np.exp(-eigen_seeds**2/(2*stdev**2))
 
 
 def regionprops(intensity_img, labels_img):

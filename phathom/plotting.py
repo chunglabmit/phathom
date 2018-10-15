@@ -1,5 +1,6 @@
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def plot_pts(pts1, pts2=None, alpha=1, candid1=None, candid2=None):
@@ -119,3 +120,20 @@ def plot_both(fixed_img, moving_img, viewer, normalization=1):
     plot_moving(moving_img, viewer, normalization)
 
 
+def plot_mip(img, axis=0, clim=None):
+    plt.imshow(img.max(axis=axis), clim=clim)
+    plt.show()
+
+
+def zprojection(image, centers=None, zlim=None, clim=None):
+    if zlim is None:
+        zlim = [0, image.shape[0]-1]
+    if len(zlim) != 2:
+        raise ValueError("Need start and stop zlim")
+    projection = image[zlim[0]:zlim[1]].max(axis=0)
+    plt.imshow(projection, clim=clim)
+    if centers is not None:
+        idx = np.where(np.logical_and(centers[:, 0] >= zlim[0], centers[:, 0] < zlim[1]))[0]
+        points = centers[idx]
+        plt.plot(points[:, 2], points[:, 1], 'r*')
+    plt.show()
