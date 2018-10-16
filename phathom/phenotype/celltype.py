@@ -85,8 +85,8 @@ def intensity_probability(image, I0=None, stdev=None):
 
     """
     if I0 is None:
-        I0 = I.mean()
-    normalized = I / I0
+        I0 = image.mean()
+    normalized = image / I0
     if stdev is None:
         stdev = normalized.std()
     return 1 - np.exp(-normalized ** 2 / (2 * stdev ** 2))
