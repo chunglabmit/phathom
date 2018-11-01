@@ -25,7 +25,7 @@ except FileNotFoundError:
 
 class TestMGAC(unittest.TestCase):
 
-    @unittest.skipIf(not test_images)
+    @unittest.skipIf(not test_images, "Test image missing")
     def test(self):
         center = (2200, 2100)
         niter = 10
