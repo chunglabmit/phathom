@@ -9,53 +9,59 @@ import numpy as np
 import torch
 
 
-def dx(x):
+def dx(x, xum):
     """Compute the gradient in the X direction
 
     Note that this function does not pad the image so the output is reduced
     in size.
 
     :param x: a Torch or Numpy 3-D array
+    :param xum: microns per voxel in the X direction
     :returns: The gradient in the X direction, reduced in size by one at
     each edge
     """
-    return (x[1:-1, 1:-1, 2:] - x[1:-1, 1:-1, :-2]) / 2
+    return (x[1:-1, 1:-1, 2:] - x[1:-1, 1:-1, :-2]) / 2 / xum
 
 
-def dy(x):
+def dy(x, yum):
     """Compute the gradient in the Y direction
 
     Note that this function does not pad the image so the output is reduced
     in size.
 
-    :param x: a Torch or Numpy 3-D array
+    :param y: a Torch or Numpy 3-D array
+    :param yum: the number of microns per voxel in the Y direction
     :returns: The gradient in the Y direction, reduced in size by one at
     each edge
     """
-    return (x[1:-1, 2:, 1:-1] - x[1:-1, :-2, 1:-1]) / 2
+    return (x[1:-1, 2:, 1:-1] - x[1:-1, :-2, 1:-1]) / 2 / yum
 
 
-def dz(x):
+def dz(x, zum):
     """Compute the gradient in the Z direction
 
     Note that this function does not pad the image so the output is reduced
     in size.
 
     :param x: a Torch or Numpy 3-D array
+    :param zum: microns per voxel in the z direction
     :returns: The gradient in the Z direction, reduced in size by one at
     each edge
     """
-    return (x[2:, 1:-1, 1:-1] - x[:-2, 1:-1, 1:-1]) / 2
+    return (x[2:, 1:-1, 1:-1] - x[:-2, 1:-1, 1:-1]) / 2 / zum
 
 
-def gradient(x):
+def gradient(x, zum, yum, xum):
     """Compute the gradient in all three directions
 
     Note that the images returned are reduced in size by 1 - there is no padding
     :param x: a Torch or Numpy 3-D array
+    :param zum: microns per voxel in the Z direction
+    :param yum: microns per voxel in the Y direction
+    :param xum: microns per voxel in the X direction
     :returns: a tuple of the z, y, and x gradients.
     """
-    return dz(x), dy(x), dx(x)
+    return dz(x, zum), dy(x, yum), dx(x, xum)
 
 
 def structure_tensor(dz, dy, dx):
@@ -151,24 +157,27 @@ def _inverse(x):
            for i in range(len(x))]
 
 
-def weingarten(x):
+def weingarten(x, zum=1, yum=1, xum=1):
     """The Weingarten shape operator on a 3D image
 
     See http://mathworld.wolfram.com/ShapeOperator.html for instance.
 
     :param x: The 3-D image to be processed
+    :param zum: microns per voxel in the Z direction
+    :param yum: microns per voxel in the Y direction
+    :param xum: microns per voxel in the X direction
     :returns: a 3 tuple of 3 tuples representing the 3 x 3 matrix of the
     shape operator per voxel. The 3D elements of the matrix are reduced in
     size by 2 at each edge (a total of 4 voxels smaller in each dimension)
     because of the double differentiation of the Hessian.
     """
-    dz_, dy_, dx_ = gradient(x)
-    dzz, dzy, dzx = gradient(dz_)
+    dz_, dy_, dx_ = gradient(x, zum=zum, yum=yum, xum=xum)
+    dzz, dzy, dzx = gradient(dz_, zum=zum, yum=yum, xum=xum)
     dyz = dzy
     dxz = dzx
-    dyy = dy(dy_)
-    dxy = dyx = dy(dx_)
-    dxx = dx(dx_)
+    dyy = dy(dy_, yum=yum)
+    dxy = dyx = dy(dx_, yum=yum)
+    dxx = dx(dx_, xum=xum)
     H = [[dzz, dzy, dzx],
          [dyz, dyy, dyx],
          [dxz, dxy, dxx]]
@@ -243,12 +252,16 @@ def eigen3(A):
     return eig1, eig2, eig3
 
 
-def eigvals_of_weingarten(x, ew_block_size=64):
+def eigvals_of_weingarten(x, ew_block_size=64,
+                          zum=1, yum=1, xum=1):
     """Find the eigenvalues of the weingarten operator
 
     :param x: an NxMxP 3D array
     :param ew_block_size: the block size for the blocks to be processed. The
     algorithm needs approximately 128 bytes per voxel processed.
+    :param zum: microns per voxel in the Z direction
+    :param yum: microns per voxel in the Y direction
+    :param xum: microns per voxel in the X direction
     :returns: an NxMxPx3 array of the 3 eigenvalues of the weingarten operator
     for the space.
     """
@@ -284,7 +297,11 @@ def eigvals_of_weingarten(x, ew_block_size=64):
 
         def do_eigenvalues_of_weingarten(idx):
             logging.debug("Starting eigenvalues of weingarten, idx=%d" % idx)
-            e[idx] = eigen3(weingarten(a[idx]))
+            #zumc = torch.from_numpy(np.array([zum], np.float32)).expand_as(a[idx]).cuda()
+            #yumc = torch.from_numpy(np.array([yum], np.float32)).expand_as(a[idx]).cuda()
+            #xumc = torch.from_numpy(np.array([xum], np.float32)).expand_as(a[idx]).cuda()
+
+            e[idx] = eigen3(weingarten(a[idx], zum=zum, yum=yum, xum=xum))
             logging.debug("Finished eigenvalues of weingarten, idx=%d" % idx)
 
         def do_copy_from_gpu(x0a, x1a, y0a, y1a, z0a, z1a, idx):
