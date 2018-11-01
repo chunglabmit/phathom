@@ -541,7 +541,7 @@ try:
         cpu_eigvals_of_weingarten = eigvals_of_weingarten
         from .torch_impl import eigvals_of_weingarten
 except:
-    pass
+    cpu_eigvals_of_weingarten = eigvals_of_weingarten
 
 if __name__ == '__main__':
     main()
