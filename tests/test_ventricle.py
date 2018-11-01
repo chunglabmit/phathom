@@ -15,14 +15,17 @@ import tifffile
 
 
 seed = 295
-test_images = False
 
-working_dir = '/media/jswaney/Drive/Justin/organoid_etango/test_ventricle'
-syto16_img = io.tiff.imread(os.path.join(working_dir, 'syto16_slice.tif'))
-
+try:
+    working_dir = '/media/jswaney/Drive/Justin/organoid_etango/test_ventricle'
+    syto16_img = io.tiff.imread(os.path.join(working_dir, 'syto16_slice.tif'))
+    test_images = True
+except FileNotFoundError:
+    test_images = False
 
 class TestMGAC(unittest.TestCase):
 
+    @unittest.skipIf(not test_images)
     def test(self):
         center = (2200, 2100)
         niter = 10
