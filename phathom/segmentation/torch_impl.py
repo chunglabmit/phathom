@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 
-def dx(x, xum):
+def dx(x, xum=1.0):
     """Compute the gradient in the X direction
 
     Note that this function does not pad the image so the output is reduced
@@ -23,7 +23,7 @@ def dx(x, xum):
     return (x[1:-1, 1:-1, 2:] - x[1:-1, 1:-1, :-2]) / 2 / xum
 
 
-def dy(x, yum):
+def dy(x, yum=1.0):
     """Compute the gradient in the Y direction
 
     Note that this function does not pad the image so the output is reduced
@@ -37,7 +37,7 @@ def dy(x, yum):
     return (x[1:-1, 2:, 1:-1] - x[1:-1, :-2, 1:-1]) / 2 / yum
 
 
-def dz(x, zum):
+def dz(x, zum=1.0):
     """Compute the gradient in the Z direction
 
     Note that this function does not pad the image so the output is reduced
@@ -51,7 +51,7 @@ def dz(x, zum):
     return (x[2:, 1:-1, 1:-1] - x[:-2, 1:-1, 1:-1]) / 2 / zum
 
 
-def gradient(x, zum, yum, xum):
+def gradient(x, zum=1.0, yum=1.0, xum=1.0):
     """Compute the gradient in all three directions
 
     Note that the images returned are reduced in size by 1 - there is no padding
