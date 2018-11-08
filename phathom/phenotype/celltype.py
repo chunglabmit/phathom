@@ -1,4 +1,8 @@
+import multiprocessing
+from functools import partial
+import warnings
 import numpy as np
+import tqdm
 from sklearn.neighbors import NearestNeighbors, kneighbors_graph
 from sklearn.cluster import AgglomerativeClustering
 from scipy.cluster.hierarchy import dendrogram, linkage
@@ -19,6 +23,9 @@ from phathom.segmentation.segmentation import (eigvals_of_weingarten,
 
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
+
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 def smooth(image, sigma):
@@ -85,8 +92,10 @@ def intensity_probability(image, I0=None, stdev=None):
 
     """
     if I0 is None:
-        I0 = I.mean()
-    normalized = I / I0
+        I0 = image.mean()
+    if I0 < 100:
+        I0 = 100
+    normalized = image / I0
     if stdev is None:
         stdev = normalized.std()
     return 1 - np.exp(-normalized ** 2 / (2 * stdev ** 2))
@@ -134,15 +143,75 @@ def nuclei_centers_probability(prob, threshold, h):
     return np.round(find_centroids(labels)).astype(np.int)
 
 
-def nuclei_centered_intensities(image, sigma, centers, radius):
-    g = gaussian(image, sigma, preserve_range=True)
-    intensities = []
-    for center in centers:
-        start = [max(0, int(c-radius)) for c in center]
-        stop = [min(int(c+radius+1), d-1) for c, d in zip(center, image.shape)]
-        bbox = utils.extract_box(g, start, stop)
-        # For now, just use a box. Can change to sphere later
-        intensities.append(bbox.flatten())
+def nuclei_centers_probability2(prob, threshold, min_dist):
+    prob = filtering.remove_background(prob, threshold)
+    return peak_local_max(prob, min_distance=min_dist, threshold_abs=threshold)
+
+
+def _detect_nuclei_chunk(input_tuple, overlap, sigma, min_intensity, steepness, offset, prob_thresh, min_dist, prob_output):
+    arr, start_coord, chunks = input_tuple
+
+    ghosted_chunk, start_ghosted, _ = utils.extract_ghosted_chunk(arr, start_coord, chunks, overlap)
+
+    if ghosted_chunk.max() < min_intensity:
+        return None
+
+    prob = nucleus_probability(ghosted_chunk, sigma, steepness, offset)
+
+    if prob_output is not None:
+        start_local = start_coord - start_ghosted
+        stop_local = np.minimum(start_local + np.asarray(chunks),
+                                np.asarray(ghosted_chunk.shape))
+        prob_valid = utils.extract_box(prob, start_local, stop_local)
+        stop_coord = start_coord + np.asarray(prob_valid.shape)
+        utils.insert_box(prob_output, start_coord, stop_coord, prob_valid)
+
+    centers_local = nuclei_centers_probability2(prob, prob_thresh, min_dist)
+
+    if centers_local.size == 0:
+        return None
+
+    # Filter out any centers detected in ghosted area
+    centers_interior = utils.filter_ghosted_points(start_ghosted, start_coord, centers_local, chunks, overlap)
+
+    # change to global coordinates
+    centers = centers_interior + start_ghosted
+    return centers
+
+
+def detect_nuclei_parallel(z_arr, sigma, min_intensity, steepness, offset, prob_thresh, min_dist, chunks, overlap, nb_workers=None, prob_output=None):
+    f = partial(_detect_nuclei_chunk,
+                overlap=overlap,
+                sigma=sigma,
+                min_intensity=min_intensity,
+                steepness=steepness,
+                offset=offset,
+                prob_thresh=prob_thresh,
+                min_dist=min_dist,
+                prob_output=prob_output)
+    results = utils.pmap_chunks(f, z_arr, chunks, nb_workers, use_imap=True)
+    return results
+
+
+def sample_intensity_cube(center, image, radius):
+    start = [max(0, int(c - radius)) for c in center]
+    stop = [min(int(c + radius + 1), d - 1) for c, d in zip(center, image.shape)]
+    bbox = utils.extract_box(image, start, stop)
+    return bbox.flatten()
+
+
+def nuclei_centered_intensities(image, centers, radius, mode='cube', nb_workers=None):
+    if nb_workers is None:
+        nb_workers = multiprocessing.cpu_count()
+
+    if mode == 'cube':
+        f = partial(sample_intensity_cube, image=image, radius=radius)
+    else:
+        raise ValueError('Only cube sampling is currently supported')
+
+    with multiprocessing.Pool(nb_workers) as pool:
+        intensities = list(tqdm.tqdm(pool.imap(f, centers), total=centers.shape[0]))
+
     return intensities
 
 
@@ -206,7 +275,7 @@ def local_densities(distances, indices, sox2_labels, tbr1_labels, radius=None):
     features = []
 
     for dist, idx in zip(distances, indices):
-        print(len(idx))
+
         sox2_flags = sox2_labels[idx]
         tbr1_flags = tbr1_labels[idx]
 
@@ -241,7 +310,6 @@ def local_densities(distances, indices, sox2_labels, tbr1_labels, radius=None):
         #     tbr1_density = 0
 
         f = np.array([sox2_density, tbr1_density])
-        print(f)
         features.append(f)
 
     return np.asarray(features)

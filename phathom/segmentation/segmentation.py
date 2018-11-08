@@ -1,6 +1,7 @@
 from phathom.segmentation import partition
 from phathom.segmentation import graphcuts
 from phathom import utils
+from phathom.synthetic import points_to_binary
 from phathom.io import conversion as imageio
 import argparse
 import itertools
@@ -445,6 +446,49 @@ def segment_chunks(working_dir, nb_workers, upsampling, sigma, h, T):
     shutil.copy(os.path.join(input_dir, 'metadata.pkl'), segmentation_abspath)
 
     print('Done!')
+
+
+def watershed_centers(image, centers, mask, **watershed_kwargs):
+    seeds = points_to_binary(tuple(centers.T), image.shape, cval=1)
+    markers = ndi.label(seeds)[0]
+    labels = morphology.watershed(-image, markers, mask=mask, **watershed_kwargs)
+    return labels
+
+
+def _watershed_probability_chunk(input_tuple, output, centers, mask, overlap, **watershed_kwargs):
+    arr, start_coord, chunks = input_tuple
+
+    # extract ghosted chunk of data
+    data_overlap, start_ghosted, stop_ghosted = utils.extract_ghosted_chunk(arr, start_coord, chunks, overlap)
+    mask_overlap, _, _ = utils.extract_ghosted_chunk(mask, start_coord, chunks, overlap)
+
+    # Find seeds within the ghosted chunk
+    centers_internal = utils.filter_points_in_box(centers, start_ghosted, stop_ghosted)
+    centers_internal_local = centers_internal - start_ghosted
+
+    # segment the chunk
+    labels_overlap = watershed_centers(data_overlap,
+                                       centers_internal_local,
+                                       mask_overlap,
+                                       watershed_line=True)
+    binary_overlap = (labels_overlap > 0)
+    binary_overlap_eroded = ndi.binary_erosion(binary_overlap)
+
+    # write the segmentation result
+    start_local = start_coord - start_ghosted
+    stop_local = np.minimum(start_local + np.asarray(chunks), np.asarray(arr.shape) - start_ghosted)
+    binary_seg = utils.extract_box(binary_overlap_eroded, start_local, stop_local)
+    stop_coord = start_coord + np.asarray(binary_seg.shape)
+    utils.insert_box(output, start_coord, stop_coord, binary_seg)
+
+
+def watershed_centers_parallel(prob, centers, mask, output, chunks, overlap, nb_workers=None):
+    f = partial(_watershed_probability_chunk,
+                output=output,
+                centers=centers,
+                mask=mask,
+                overlap=overlap)
+    utils.pmap_chunks(f, prob, chunks, nb_workers, use_imap=True)
 
 
 def _add_parser_args(parser):

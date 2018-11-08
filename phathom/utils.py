@@ -244,7 +244,7 @@ def insert_box(arr, start, stop, data):
     return arr
 
 
-def pmap_chunks(f, arr, chunks=None, nb_workers=None):
+def pmap_chunks(f, arr, chunks=None, nb_workers=None, use_imap=False):
     """Maps a function over an array in parallel using chunks
 
     The function `f` should take a reference to the array, a starting index, and the chunk size.
@@ -261,6 +261,9 @@ def pmap_chunks(f, arr, chunks=None, nb_workers=None):
         the shape of chunks to use. Default tries to access arr.chunks and falls back to arr.shape
     nb_workers : int, optional
         number of parallel processes to apply f with. Default, cpu_count
+    use_imap : bool, optional
+        whether or not to use imap instead os starmap in order to get an iterator for tqdm.
+        Note that this requires input tuple unpacking manually inside of `f`.
 
     Returns
     -------
@@ -284,16 +287,50 @@ def pmap_chunks(f, arr, chunks=None, nb_workers=None):
         args = (arr, start_coord, chunks)
         args_list.append(args)
 
-    # TODO: fix this tqdm progbar. It's just displaying the list conversion progress
-    if nb_workers > 1:
-        with multiprocessing.Pool(processes=nb_workers) as pool:
-            results = list(tqdm.tqdm(pool.starmap(f, args_list)))
-    else:
-        results = []
-        for args in tqdm.tqdm(args_list):
-            results.append(f(*args))
+    with multiprocessing.Pool(processes=nb_workers) as pool:
+        if use_imap:
+            results = list(tqdm.tqdm(pool.imap(f, args_list), total=len(args_list)))
+        else:
+            results = list(pool.starmap(f, args_list))
 
     return results
+
+
+def extract_ghosted_chunk(arr, start_coord, chunks, overlap):
+    end_coord = np.minimum(arr.shape, start_coord + np.asarray(chunks))
+    start_coord_ghosted = np.maximum(np.zeros(arr.ndim, 'int'),
+                                     np.array([s - overlap for s in start_coord]))
+    stop_coord_ghosted = np.minimum(arr.shape,
+                                    np.array([e + overlap for e in end_coord]))
+    ghosted_chunk = extract_box(arr, start_coord_ghosted, stop_coord_ghosted)
+    return ghosted_chunk, start_coord_ghosted, stop_coord_ghosted
+
+
+def filter_points_in_box(coords, start, stop):
+    interior_z = np.logical_and(coords[:, 0] >= start[0], coords[:, 0] < stop[0])
+    interior_y = np.logical_and(coords[:, 1] >= start[1], coords[:, 1] < stop[1])
+    interior_x = np.logical_and(coords[:, 2] >= start[2], coords[:, 2] < stop[2])
+    interior = np.logical_and(np.logical_and(interior_z, interior_y), interior_x)
+    return coords[np.where(interior)]
+
+
+def filter_ghosted_points(start_ghosted, start_coord, centers_local, chunks, overlap):
+    # filter nuclei on edges
+    if start_ghosted[0] < start_coord[0]:
+        interior_z = np.logical_and(centers_local[:, 0] >= overlap, centers_local[:, 0] < chunks[0] + overlap)
+    else:
+        interior_z = (centers_local[:, 0] < chunks[0])
+    if start_ghosted[1] < start_coord[1]:
+        interior_y = np.logical_and(centers_local[:, 1] >= overlap, centers_local[:, 1] < chunks[1] + overlap)
+    else:
+        interior_y = (centers_local[:, 1] < chunks[1])
+    if start_ghosted[2] < start_coord[2]:
+        interior_x = np.logical_and(centers_local[:, 2] >= overlap, centers_local[:, 2] < chunks[2] + overlap)
+    else:
+        interior_x = (centers_local[:, 2] < chunks[2])
+    interior = np.logical_and(np.logical_and(interior_z, interior_y), interior_x)
+    return centers_local[np.where(interior)]
+
 
 
 # mapper = None

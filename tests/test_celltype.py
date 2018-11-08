@@ -175,6 +175,8 @@ class TestNucleiCenteredIntensities(unittest.TestCase):
         threshold = 0.1
         radius = 1
 
+        print(syto16_img.dtype)
+
         prob = celltype.nucleus_probability(syto16_img, sigma, steepness, offset)
         centers = celltype.nuclei_centers_probability(prob, threshold, h)
         sox2 = celltype.nuclei_centered_intensities(sox2_img, sigma, centers, radius)

@@ -8,9 +8,10 @@ import multiprocessing
 import os
 import numpy as np
 from skimage.exposure import equalize_adapthist
+from skimage.filters import gaussian
 import tqdm
 from phathom import io
-from phathom.utils import tifs_in_dir, make_dir
+from phathom.utils import tifs_in_dir, make_dir, extract_box, extract_ghosted_chunk, insert_box, pmap_chunks
 
 
 def clahe_2d(image, kernel_size, clip_limit=0.01, nbins=256):
@@ -70,21 +71,45 @@ def remove_background(image, threshold):
     return image * mask
 
 
-def preprocess(tif_path, output_path, threshold=None, kernel_size=127):
+def gaussian_blur(image, sigma):
+    return gaussian(image, sigma, preserve_range=True)
+
+
+def _gaussian_blur_chunk(input_tuple, sigma, output, overlap):
+    arr, start_coord, chunks = input_tuple
+    ghosted_chunk, start_ghosted, stop_ghosted = extract_ghosted_chunk(arr,
+                                                                       start_coord,
+                                                                       chunks,
+                                                                       overlap)
+    g = gaussian_blur(ghosted_chunk, sigma)
+    start_local = start_coord - start_ghosted
+    stop_local = np.minimum(start_local + np.asarray(chunks),
+                            np.asarray(ghosted_chunk.shape))
+    g_valid = extract_box(g, start_local, stop_local)
+
+    stop_coord = start_coord + np.asarray(g_valid.shape)
+    insert_box(output, start_coord, stop_coord, g_valid)
+
+
+def gaussian_blur_parallel(arr, sigma, output, chunks, overlap, nb_workers=None):
+    f = partial(_gaussian_blur_chunk, sigma=sigma, output=output, overlap=overlap)
+    pmap_chunks(f, arr, chunks, nb_workers=nb_workers, use_imap=True)
+
+
+def preprocess(tif_path, output_path, threshold=None, kernel_size=127, clip_limit=0.01):
     img = io.tiff.imread(tif_path)
     img_max = img.max()
     img_min = img.min()
-    enhanced_normalized = clahe_2d(img, kernel_size)
+    enhanced_normalized = clahe_2d(img, kernel_size, clip_limit)
     enhanced = enhanced_normalized * (img_max - img_min) + img_min
-    output = enhanced
-    # if threshold is not None:
-    # mask = (img >= threshold)
-    # output = enhanced * mask
-    # output = remove_background(img, threshold)
+    if threshold is not None:
+        output = enhanced * (img >= threshold)
+    else:
+        output = enhanced
     io.tiff.imsave(output_path, output.astype(img.dtype), compress=1)
 
 
-def preprocess_batch(path_to_tifs, output_path, threshold=None, kernel_size=127, nb_workers=None):
+def preprocess_batch(path_to_tifs, output_path, threshold=None, kernel_size=127, clip_limit=0.01, nb_workers=None):
     if nb_workers is None:
         nb_workers = multiprocessing.cpu_count()
 
@@ -94,7 +119,7 @@ def preprocess_batch(path_to_tifs, output_path, threshold=None, kernel_size=127,
     args_list = []
     for path, filename in zip(paths, filenames):
         output_path = os.path.join(output_abspath, filename)
-        args = (path, output_path, threshold, kernel_size)
+        args = (path, output_path, threshold, kernel_size, clip_limit)
         args_list.append(args)
 
     with multiprocessing.Pool(nb_workers) as pool:
@@ -102,29 +127,30 @@ def preprocess_batch(path_to_tifs, output_path, threshold=None, kernel_size=127,
 
 
 def main():
-    path_to_tifs = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/fixed/processed_tiffs'
-    output_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/fixed/processed_tiffs2'
+    path_to_tifs = '/media/jswaney/Drive/Justin/organoid_etango/syto16'
+    output_path = '/media/jswaney/Drive/Justin/organoid_etango/syto16_clahe'
     nb_workers = 12
     threshold = 300
     kernel_size = 127
+    clip_limit = 0.005
 
-    paths, filenames = tifs_in_dir(path_to_tifs)
-
-    output_abspath = make_dir(output_path)
-
-    args_list = []
-    for path, filename in zip(paths, filenames):
-        output_path = os.path.join(output_abspath, filename)
-        args = (path, output_path, threshold, kernel_size)
-        args_list.append(args)
-
-    with multiprocessing.Pool(nb_workers) as pool:
-        pool.starmap(preprocess, args_list)
+    # paths, filenames = tifs_in_dir(path_to_tifs)
+    #
+    # output_abspath = make_dir(output_path)
+    #
+    # args_list = []
+    # for path, filename in zip(paths, filenames):
+    #     output_path = os.path.join(output_abspath, filename)
+    #     args = (path, output_path, threshold, kernel_size)
+    #     args_list.append(args)
+    #
+    # with multiprocessing.Pool(nb_workers) as pool:
+    #     pool.starmap(preprocess, args_list)
 
     #####
 
-    path_to_tifs = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/moving/processed_tiffs'
-    output_path = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde/moving/processed_tiffs2'
+    path_to_tifs = '/media/jswaney/Drive/Justin/organoid_etango/sox2'
+    output_path = '/media/jswaney/Drive/Justin/organoid_etango/sox2_clahe'
 
     paths, filenames = tifs_in_dir(path_to_tifs)
 
@@ -133,7 +159,7 @@ def main():
     args_list = []
     for path, filename in zip(paths, filenames):
         output_path = os.path.join(output_abspath, filename)
-        args = (path, output_path, threshold, kernel_size)
+        args = (path, output_path, threshold, kernel_size, clip_limit)
         args_list.append(args)
 
     with multiprocessing.Pool(nb_workers) as pool:

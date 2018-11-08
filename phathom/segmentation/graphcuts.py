@@ -1,11 +1,11 @@
 import numpy as np
 from scipy.stats import poisson
 import maxflow
-import phathom.utils as utils
 import tqdm
 from functools import partial
 import multiprocessing
-# import warnings
+from phathom import utils
+# import warnings  # Leads to import errors with skimage.filters.gaussian
 # warnings.filterwarnings("error")
 
 
@@ -249,10 +249,11 @@ def graph_cuts(data, back_mu, obj_mu, w_const=0, w_grad=0):
     g.maxflow()
     sgm = g.get_grid_segments(node_ids)
 
-    return sgm
+    return sgm.astype(np.uint8)
 
 
-def _chunk_graph_cuts(arr, start_coord, chunks, out_arr, overlap, back_mu, obj_mu, w_const, w_grad):
+def _chunk_graph_cuts(input_tuple, out_arr, overlap, back_mu, obj_mu, w_const, w_grad):
+    arr, start_coord, chunks = input_tuple
     end_coord = np.minimum(arr.shape, start_coord + np.asarray(chunks))
 
     # extract ghosted chunk of data
@@ -291,9 +292,6 @@ def parallel_graph_cuts(arr, out_arr, overlap, chunks, nb_workers=None, **kwargs
         dictionary of arguments to pass to graph_cuts
 
     """
-    if nb_workers is None:
-        nb_workers = multiprocessing.cpu_count()
-
     back_mu = kwargs.pop('back_mu')
     obj_mu = kwargs.pop('obj_mu')
     w_const = kwargs.pop('w_const', 0)
@@ -307,4 +305,4 @@ def parallel_graph_cuts(arr, out_arr, overlap, chunks, nb_workers=None, **kwargs
                 w_const=w_const,
                 w_grad=w_grad)
 
-    utils.pmap_chunks(f, arr, chunks, nb_workers)
+    utils.pmap_chunks(f, arr, chunks, nb_workers, use_imap=True)

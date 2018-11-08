@@ -12,7 +12,7 @@ def plot_pts(pts1, pts2=None, alpha=1, candid1=None, candid2=None):
     :param candid1: matches in point cloud 1
     :param candid2: matches in point cloud 2
     """
-    fig = plt.figure()
+    fig = plt.figure(figsize=(4, 4))
     ax = fig.add_subplot(111, projection='3d')
 
     ax.scatter(pts1[:,2], pts1[:,1], pts1[:,0], c='b', marker='o', label='Stationary', alpha=alpha)
@@ -85,6 +85,15 @@ def plot_correspondence(pts1, pts2, alpha=0.1):
 
 def plot_hist(data, bins, xlim=None, ylim=None):
     plt.hist(data, bins)
+    if xlim is not None:
+        plt.xlim(xlim)
+    if ylim is not None:
+        plt.ylim(ylim)
+    plt.show()
+
+
+def plot_hist_2d(x, y, bins, _range=None, xlim=None, ylim=None):
+    plt.hist2d(x, y, bins=bins, range=_range)
     if xlim is not None:
         plt.xlim(xlim)
     if ylim is not None:

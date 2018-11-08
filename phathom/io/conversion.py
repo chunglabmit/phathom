@@ -18,6 +18,7 @@ rechunk_zarr - copy a zarr array with new parameters
 from phathom import utils
 from phathom import io
 import skimage.external.tifffile as tifffile
+from skimage.transform import resize, downscale_local_mean
 import zarr
 from numcodecs import Blosc, Delta
 import numpy as np
@@ -35,7 +36,10 @@ def tifs_to_zarr_chunks(z_arr, tif_paths, start_list, nb_workers):
         data = io.tiff.imread_parallel(tif_paths, nb_workers)
         # data = io.tiff.imread(tif_paths)
     else:
-        data = io.tiff.imread(tif_paths)
+        data = []
+        for tif_path in tif_paths:
+            data.append(io.tiff.imread(tif_path))
+        data = np.asarray(data)
 
     args = []
     for start in start_list:
@@ -60,7 +64,7 @@ def tifs_to_zarr(tif_dir, zarr_path, chunks, in_memory=False, nb_workers=1):
     compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)  # good for integers
     store = zarr.storage.NestedDirectoryStore(zarr_path)
     tif_paths, _ = utils.tifs_in_dir(tif_dir)
-    img = io.tiff.imread(tif_paths[0]).astype(np.uint16)
+    img = io.tiff.imread(tif_paths[0])
     shape = (len(tif_paths), *img.shape)
     dtype = img.dtype
     # TODO: Swtich to producer-consumer model for tif reading -> zarr writing
@@ -241,6 +245,43 @@ def ims_to_zarr(ims_path, zarr_path, chunks, nb_workers):
 
         # Save chunks in parallel
         pool.starmap(ims_chunk_to_zarr, args)
+
+
+def resize_tif(input_path, shape, output_path):
+    img = tifffile.imread(input_path)
+    resized = resize(img, shape, anti_aliasing=True)
+    tifffile.imsave(output_path, resized)
+
+
+def resize_tif_batch(tif_dir, shape, output_dir):
+    utils.make_dir(output_dir)
+    tif_paths, tif_filenames = utils.tifs_in_dir(tif_dir)
+    for input_path, filename in zip(tif_paths, tif_filenames):
+        output_path = os.path.join(output_dir, filename)
+        resize_tif(input_path, shape, output_path)
+
+
+def downscale_tif(input_path, factors, output_path):
+    img = tifffile.imread(input_path)
+    downscaled = downscale_local_mean(img, factors).astype(img.dtype)
+    tifffile.imsave(output_path, downscaled, compress=1)
+
+
+def downscale_tif_batch(tif_dir, factors, output_dir, nb_workers=None):
+    if nb_workers is None:
+        nb_workers = multiprocessing.cpu_count()
+
+    utils.make_dir(output_dir)
+    tif_paths, tif_filenames = utils.tifs_in_dir(tif_dir)
+
+    args = []
+    for input_path, filename in zip(tif_paths, tif_filenames):
+        output_path = os.path.join(output_dir, filename)
+        args.append((input_path, factors, output_path))
+
+    with multiprocessing.Pool(nb_workers) as pool:
+        pool.starmap(downscale_tif, args)
+
 
 
 def main():

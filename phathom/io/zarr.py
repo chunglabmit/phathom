@@ -32,6 +32,10 @@ def new_zarr(path, shape, chunks, dtype, **kwargs):
     return z_arr_out
 
 
+def new_zarr_like(path, arr, **kwargs):
+    return new_zarr(path, arr.shape, arr.chunks, arr.dtype, **kwargs)
+
+
 def write_subarray(data, z_arr, start):
     """ Write a subarray into a zarr array.
 

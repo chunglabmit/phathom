@@ -1,7 +1,7 @@
 from phathom.io import conversion as imageio
 from phathom import utils
 import numpy as np
-from skimage.filters import threshold_otsu
+# from skimage.filters import threshold_otsu
 from skimage.util import crop
 import skimage
 import os.path
