@@ -34,12 +34,21 @@ np.random.seed(123)
 #             imageio.imsave('../data/{}.tif'.format(d['name']), d['data'].astype('float32'))
 
 
-def gradient(data):
+def gradient(data, zum=1.0, yum=1.0, xum=1.0):
+    """Compute the gradient in units of intensity / micron
+
+    :param data: 3d numpy array
+    :param zum: size of a voxel in the z direction - defaults to 1
+    :param yum: size of a voxel in the y direction - defaults to 1
+    :param xum: size of a voxel in the x direction - defaults to 1
+    :return: a 4-dimensional matrix with the last dimension being the z==0,
+    y==1, x==2 selector of the gradient direction
+    """
     fz, fy, fx = np.gradient(data, edge_order=2)
     grad = np.zeros((*data.shape, 3))
-    grad[..., 0] = fz
-    grad[..., 1] = fy
-    grad[..., 2] = fx
+    grad[..., 0] = fz / zum
+    grad[..., 1] = fy / yum
+    grad[..., 2] = fx / xum
     return grad
 
 
@@ -51,13 +60,14 @@ def hessian_2d(data, sigma):
         l1[i], l2 = skimage.feature.hessian_matrix_eigvals(Hyy, Hyx, Hxx)
 
 
-def hessian(data):
-    grad = np.gradient(data)
+def hessian(data, zum=1.0, yum=1.0, xum=1.0):
+    microns = np.array([zum, yum, xum]).reshape(3, 1, 1, 1)
+    grad = np.gradient(data) / microns
     n_dims = len(grad)
     H = np.zeros((*data.shape, n_dims, n_dims))
     for i, first_deriv in enumerate(grad):
         for j in range(i, n_dims):
-            second_deriv = np.gradient(first_deriv, axis=j)
+            second_deriv = np.gradient(first_deriv, axis=j) / microns[j]
             H[..., i, j] = second_deriv
             if i != j:
                 H[..., j, i] = second_deriv
@@ -81,10 +91,10 @@ def structure_tensor(grad):
     return S
 
 
-def weingarten(g):
-    grad = gradient(g)
+def weingarten(g, zum=1.0, yum=1.0, xum=1.0):
+    grad = gradient(g, zum=zum, yum=yum, xum=xum)
     l = np.sqrt(1+np.linalg.norm(grad, axis=-1))
-    H = hessian(g)
+    H = hessian(g, zum=zum, yum=yum, xum=xum)
     S = structure_tensor(grad)
     L = np.zeros(S.shape)
     for i in range(3):
@@ -103,8 +113,8 @@ def eigvalsh(A):
     return np.linalg.eigvalsh(A)
 
 
-def eigvals_of_weingarten(g):
-    return eigvalsh(weingarten(g))
+def eigvals_of_weingarten(g, zum=1.0, yum=1.0, xum=1.0):
+    return eigvalsh(weingarten(g, zum=zum, yum=yum, xum=xum))
 
 
 def convex_seeds(eigvals):
@@ -575,7 +585,7 @@ try:
         cpu_eigvals_of_weingarten = eigvals_of_weingarten
         from .torch_impl import eigvals_of_weingarten
 except:
-    pass
+    cpu_eigvals_of_weingarten = eigvals_of_weingarten
 
 if __name__ == '__main__':
     main()

@@ -55,3 +55,41 @@ class TestAdaptiveThreshold(unittest.TestCase):
         a = np.random.RandomState(1234).uniform(size=(100, 100, 100)) + 2
         t = pss.adaptive_threshold(a)
         self.assertTrue(np.max(a) >= 2)
+
+
+class TestEigenvaulesOfWeingarten(unittest.TestCase):
+
+    def test_isotropic(self):
+        #
+        # Make a sphere
+        #
+        sphere = np.clip(
+            50 - np.sqrt(np.sum(np.square(np.mgrid[-50:51, -50:51, -50:51]), 0)),
+            0, 50)
+        e = pss.cpu_eigvals_of_weingarten(sphere)
+        for eidx in range(3):
+            minidx = np.argmin(e[..., eidx])
+            minz = minidx // 101 // 101
+            miny = (minidx // 101) % 101
+            minx = minidx % 101
+            self.assertEqual(minz, 50)
+            self.assertEqual(miny, 50)
+            self.assertEqual(minx, 50)
+
+    def test_anisotropic(self):
+        grid = np.mgrid[-50:51, -50:51, -50:51].astype(np.float32) * \
+            np.array([2.0, 1.0, .5]).reshape(3, 1, 1, 1)
+        sphere = np.clip(
+            25 - np.sqrt(np.sum(np.square(grid), 0)),
+            0, 25)
+        e = pss.cpu_eigvals_of_weingarten(sphere, zum=2.0, yum=1.0, xum=.5)
+        #
+        # The value at z = 4 should be about the same as y = 8 and x = 16
+        # because the micron distance is similar.
+        #
+        for eidx in range(3):
+            zval = e[54, 50, 50, eidx]
+            yval = e[50, 58, 50, eidx]
+            xval = e[50, 50, 66, eidx]
+            self.assertAlmostEqual(zval, yval, 2)
+            self.assertAlmostEqual(zval, xval, 2)

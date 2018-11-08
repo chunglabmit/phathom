@@ -14,13 +14,15 @@ from skimage.viewer import CollectionViewer
 import tifffile
 
 seed = 295
-test_images = False
 
-working_dir = '/media/jswaney/Drive/Justin/organoid_etango_small/test_celltype'
-syto16_img = io.tiff.imread(os.path.join(working_dir, 'syto16.tif'))
-sox2_img = io.tiff.imread(os.path.join(working_dir, 'sox2.tif'))
-tbr1_img = io.tiff.imread(os.path.join(working_dir, 'tbr1.tif'))
-
+try:
+    working_dir = '/media/jswaney/Drive/Justin/organoid_etango_small/test_celltype'
+    syto16_img = io.tiff.imread(os.path.join(working_dir, 'syto16.tif'))
+    sox2_img = io.tiff.imread(os.path.join(working_dir, 'sox2.tif'))
+    tbr1_img = io.tiff.imread(os.path.join(working_dir, 'tbr1.tif'))
+    test_images = True
+except FileNotFoundError:
+    test_images = False
 
 reason = "Only testing synthetic data, not real images"
 

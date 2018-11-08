@@ -24,12 +24,6 @@ from skimage.future import graph
 
 
 seed = 295
-test_images = False
-
-working_dir = '/media/jswaney/Drive/Justin/organoid_etango/test_ventricle'
-syto16_img = io.tiff.imread(os.path.join(working_dir, 'syto16_clahe_8x.tif'))
-sox2_img = io.tiff.imread(os.path.join(working_dir, 'sox2_clahe_8x.tif'))
-
 cmap = mcolors.ListedColormap(np.random.rand(4096, 3))
 
 
@@ -80,6 +74,13 @@ def merge_boundary(graph, src, dst):
     """
     pass
 
+try:
+    working_dir = '/media/jswaney/Drive/Justin/organoid_etango/test_ventricle'
+    syto16_img = io.tiff.imread(os.path.join(working_dir, 'syto16_slice.tif'))
+    sox2_img = io.tiff.imread(os.path.join(working_dir, 'sox2_clahe_8x.tif'))
+    test_images = True
+except FileNotFoundError:
+    test_images = False
 
 class TestMGAC(unittest.TestCase):
 
@@ -87,16 +88,18 @@ class TestMGAC(unittest.TestCase):
     def test_random_walker(self):
         threshold = 600
         w = 10
-
-
         binary = (syto16_img < threshold).astype(np.float32)
         dilated = binary_dilation(binary, np.ones((w, w))).astype(np.float32)
         unlabeled = dilated - binary
         labels = binary + 1
         labels *= (1 - unlabeled.astype(np.float32))
-
         mask = ventricle.rw(img_as_float32(syto16_img), labels)
 
+    @unittest.skipIf(not test_images, "Test image missing")
+    def test(self):
+        center = (2200, 2100)
+        niter = 10
+        mask = ventricle.ventricle_2d(syto16_img, center, niter)
         plt.imshow(syto16_img, clim=[0, 4095])
         plt.imshow(mask, alpha=0.5, clim=[0, 2])
         plt.show()
