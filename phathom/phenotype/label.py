@@ -134,7 +134,5 @@ def main():
                         false=labeler.idx_false)
 
 
-
-
 if __name__ == '__main__':
     main()

@@ -2,7 +2,7 @@ import contextlib
 import os
 import pickle
 import numpy as np
-from itertools import product
+from itertools import product, starmap
 import multiprocessing
 import tqdm
 import sys
@@ -287,12 +287,17 @@ def pmap_chunks(f, arr, chunks=None, nb_workers=None, use_imap=False):
         args = (arr, start_coord, chunks)
         args_list.append(args)
 
-    with multiprocessing.Pool(processes=nb_workers) as pool:
+    if nb_workers > 1:
+        with multiprocessing.Pool(processes=nb_workers) as pool:
+            if use_imap:
+                results = list(tqdm.tqdm(pool.imap(f, args_list), total=len(args_list)))
+            else:
+                results = list(pool.starmap(f, args_list))
+    else:
         if use_imap:
-            results = list(tqdm.tqdm(pool.imap(f, args_list), total=len(args_list)))
+            results = list(tqdm.tqdm(map(f, args_list), total=len(args_list)))
         else:
-            results = list(pool.starmap(f, args_list))
-
+            results = list(starmap(f, args_list))
     return results
 
 
@@ -331,6 +336,19 @@ def filter_ghosted_points(start_ghosted, start_coord, centers_local, chunks, ove
     interior = np.logical_and(np.logical_and(interior_z, interior_y), interior_x)
     return centers_local[np.where(interior)]
 
+
+def read_voxel_size(path, micron=True):
+    """Reads in the voxel size stored in `path` CSV file with voxel dimensions in nanometers
+
+    :param path: path to CSV file containing integer values of voxel dimensions in nanometers
+    :param micron: Flag to return nanometers or micron
+    :return: voxel_size tuple in same order as in CSV
+    """
+    with open(path, mode='r') as f:
+        line = f.readline().split('\n')[0]
+    dims = line.split(',')
+    voxel_size = tuple([int(d) / 1000 for d in dims])
+    return voxel_size
 
 
 # mapper = None

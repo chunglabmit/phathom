@@ -1,6 +1,8 @@
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import numpy as np
+from nuggt.utils import ngutils
+import neuroglancer
 
 
 def plot_pts(pts1, pts2=None, alpha=1, candid1=None, candid2=None):
@@ -108,25 +110,25 @@ def plot_overlay(img1, img2, clim1=None, clim2=None, figsize=None):
     plt.show()
 
 
-def plot_image(img, viewer, layer, shader):
+def plot_image(img, viewer, layer, shader, voxel_size=(1, 1, 1)):
     with viewer.txn() as txn:
-        source = neuroglancer.LocalVolume(img.astype(np.float32))
+        source = neuroglancer.LocalVolume(img.astype(np.float32), voxel_size=voxel_size)
         txn.layers[layer] = neuroglancer.ImageLayer(source=source, shader=shader)
 
 
-def plot_fixed(fixed_img, viewer, normalization=1):
+def plot_fixed(fixed_img, viewer, normalization=1, voxel_size=(1, 1, 1)):
     fixed_shader = ngutils.red_shader % (1 / normalization)
-    plot_image(fixed_img, viewer, 'fixed', fixed_shader)
+    plot_image(fixed_img, viewer, 'fixed', fixed_shader, voxel_size)
 
 
-def plot_moving(moving_img, viewer, normalization=1):
+def plot_moving(moving_img, viewer, normalization=1, voxel_size=(1, 1, 1)):
     moving_shader = ngutils.green_shader % (1 / normalization)
-    plot_image(moving_img, viewer, 'moving', moving_shader)
+    plot_image(moving_img, viewer, 'moving', moving_shader, voxel_size)
 
 
-def plot_both(fixed_img, moving_img, viewer, normalization=1):
-    plot_fixed(fixed_img, viewer, normalization)
-    plot_moving(moving_img, viewer, normalization)
+def plot_both(fixed_img, moving_img, viewer, normalization=1, fixed_voxel_size=(1, 1, 1), moving_voxel_size=(1, 1, 1)):
+    plot_fixed(fixed_img, viewer, normalization, fixed_voxel_size)
+    plot_moving(moving_img, viewer, normalization, moving_voxel_size)
 
 
 def plot_mip(img, axis=0, clim=None):

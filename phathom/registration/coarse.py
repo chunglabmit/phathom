@@ -84,7 +84,7 @@ def downsample_mean(img, factors):
     return block_reduce(img, factors, np.mean, 0)
 
 
-def rigid_transformation(t, r, pts, center=None):
+def rigid_transformation(t, r, pts, center=None, s=1):
     """Apply rotation and translation (rigid transformtion) to a set of points
 
     Parameters
@@ -105,12 +105,12 @@ def rigid_transformation(t, r, pts, center=None):
 
     """
     if center is None:
-        return r.dot(pts.T).T + t
+        return s*r.dot(pts.T).T + t
     else:
-        return r.dot((pts-center).T).T + center + t
+        return s*r.dot((pts-center).T).T + center + t
 
 
-def rigid_warp(img, t, thetas, center, output_shape):
+def rigid_warp(img, t, thetas, s, center, output_shape):
     """Warp an image using a rigid transformation
 
     Parameters
@@ -135,7 +135,7 @@ def rigid_warp(img, t, thetas, center, output_shape):
     r = pcloud.rotation_matrix(thetas)
     idx = np.indices(output_shape)
     pts = np.reshape(idx, (idx.shape[0], idx.size//idx.shape[0])).T
-    warped_pts = rigid_transformation(t, r, pts, center)
+    warped_pts = rigid_transformation(t, r, pts, center, s)
     interp_values = map_coordinates(img, warped_pts.T)
     warped_img = np.reshape(interp_values, output_shape)
     return warped_img
@@ -237,13 +237,14 @@ def _registration_objective(x, source, target, center):
     """
     transformed_img = rigid_warp(source,
                                  t=x[:3],
-                                 thetas=x[3:],
+                                 thetas=x[3:-1],
+                                 s=x[-1],
                                  center=center,
                                  output_shape=target.shape)
     return mse(target, transformed_img)
 
 
-def optimize(source, target, center=None, t0=None, theta0=None, niter=10):
+def optimize(source, target, center=None, t0=None, theta0=None, s0=1, niter=10):
     """Estimate rigid transformation parameters that align source to target using
     basinghopping (Metropolis-Hastings) with L-BFGS-B minimizer
 
@@ -279,12 +280,12 @@ def optimize(source, target, center=None, t0=None, theta0=None, niter=10):
         t0 = target_center - center
     if theta0 is None:
         theta0 = np.zeros_like(center)
-    bounds = [(-s, s) for s in target.shape] + [(-np.pi, np.pi) for _ in range(3)]
+    bounds = [(-d, d) for d in target.shape] + [(-2*np.pi, 2*np.pi) for _ in range(3)] + [(-0.5, 2)]
     res = basinhopping(_registration_objective,
-                       x0=np.concatenate((t0, theta0)),
+                       x0=np.concatenate((t0, theta0, np.asarray([s0]))),
                        niter=niter,
                        T=1.0,
-                       stepsize=1.0,
+                       stepsize=0.1,
                        interval=5,
                        minimizer_kwargs={
                            'method': 'L-BFGS-B',
@@ -297,8 +298,9 @@ def optimize(source, target, center=None, t0=None, theta0=None, niter=10):
                        },
                        disp=True)
     t_star = res.x[:3]
-    theta_star = res.x[3:]
-    return t_star, theta_star, center
+    theta_star = res.x[3:-1]
+    s_star = res.x[-1]
+    return t_star, theta_star, center, s_star
 
 
 def _scale_rigid_params(t, center, factors):

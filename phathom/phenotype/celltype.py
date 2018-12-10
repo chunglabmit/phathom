@@ -23,7 +23,10 @@ from phathom.segmentation.segmentation import (eigvals_of_weingarten,
 
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
-
+import torch
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    from phathom.segmentation.segmentation import cpu_eigvals_of_weingarten
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -35,7 +38,7 @@ def smooth(image, sigma):
 
 
 def calculate_eigvals(g):
-    eigvals = eigvals_of_weingarten(g)
+    eigvals = cpu_eigvals_of_weingarten(g)
     return eigvals
 
 
@@ -96,10 +99,11 @@ def intensity_probability(image, I0=None, stdev=None):
     normalized = image / I0
     if stdev is None:
         stdev = normalized.std()
+        print(stdev)
     return 1 - np.exp(-normalized ** 2 / (2 * stdev ** 2))
 
 
-def nucleus_probability(image, sigma, steepness=500, offset=0.0005):
+def nucleus_probability(image, sigma, steepness=500, offset=0.0005, I0=None, stdev=None):
     """Calculate the nucleus probability map using logistic regression over
     curvature eigenvalues
 
@@ -123,7 +127,7 @@ def nucleus_probability(image, sigma, steepness=500, offset=0.0005):
     g = smooth(image, sigma)
     eigvals = calculate_eigvals(g)
     p_curvature = curvature_probability(eigvals, steepness, offset)
-    p_intensity = intensity_probability(g)
+    p_intensity = intensity_probability(g, I0, stdev)
     return p_curvature * p_intensity
 
 
@@ -146,7 +150,7 @@ def nuclei_centers_probability2(prob, threshold, min_dist):
     return peak_local_max(prob, min_distance=min_dist, threshold_abs=threshold)
 
 
-def _detect_nuclei_chunk(input_tuple, overlap, sigma, min_intensity, steepness, offset, prob_thresh, min_dist, prob_output):
+def _detect_nuclei_chunk(input_tuple, overlap, sigma, min_intensity, steepness, offset, I0=None, stdev=None, prob_thresh=0.5, min_dist=1, prob_output=None):
     arr, start_coord, chunks = input_tuple
 
     ghosted_chunk, start_ghosted, _ = utils.extract_ghosted_chunk(arr, start_coord, chunks, overlap)
@@ -154,7 +158,7 @@ def _detect_nuclei_chunk(input_tuple, overlap, sigma, min_intensity, steepness, 
     if ghosted_chunk.max() < min_intensity:
         return None
 
-    prob = nucleus_probability(ghosted_chunk, sigma, steepness, offset)
+    prob = nucleus_probability(ghosted_chunk, sigma, steepness, offset, I0, stdev)
 
     if prob_output is not None:
         start_local = start_coord - start_ghosted
@@ -177,13 +181,15 @@ def _detect_nuclei_chunk(input_tuple, overlap, sigma, min_intensity, steepness, 
     return centers
 
 
-def detect_nuclei_parallel(z_arr, sigma, min_intensity, steepness, offset, prob_thresh, min_dist, chunks, overlap, nb_workers=None, prob_output=None):
+def detect_nuclei_parallel(z_arr, sigma, min_intensity, steepness, offset, I0, stdev, prob_thresh, min_dist, chunks, overlap, nb_workers=None, prob_output=None):
     f = partial(_detect_nuclei_chunk,
                 overlap=overlap,
                 sigma=sigma,
                 min_intensity=min_intensity,
                 steepness=steepness,
                 offset=offset,
+                I0=I0,
+                stdev=stdev,
                 prob_thresh=prob_thresh,
                 min_dist=min_dist,
                 prob_output=prob_output)

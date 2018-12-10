@@ -40,6 +40,8 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 from tqdm import tqdm
 
+os.environ['QT_XKB_CONFIG_ROOT'] = "/usr/share/X11/xkb"
+
 
 def nuclei_centered_box(arr, coord, patch_width, patch_height):
     start = coord - np.array([patch_height // 2, patch_width // 2, patch_width // 2])
@@ -103,7 +105,7 @@ class MatchingAccuracy(object):
 
 
 def manual_accuracy(fixed_blobs, moving_blobs, matches_fixed, matches_moving, patch_width, patch_height, projection,
-                    arr_fixed, arr_moving, arr_reg):
+                    arr_fixed, arr_moving, arr_reg=None):
 
     fig, (ax_fixed, ax_moving, ax_reg) = plt.subplots(ncols=3)
     match_acc = MatchingAccuracy(len(matches_fixed))
@@ -120,15 +122,19 @@ def manual_accuracy(fixed_blobs, moving_blobs, matches_fixed, matches_moving, pa
 
             fixed = nuclei_centered_mip(self.arr_fixed, fixed_blobs[matches_fixed[self.idx]], patch_width, patch_height,
                                            projection)
-            reg = nuclei_centered_mip(self.arr_reg, fixed_blobs[matches_fixed[self.idx]], patch_width, patch_height,
-                                         projection)
+            if arr_reg is not None:
+                reg = nuclei_centered_mip(self.arr_reg, fixed_blobs[matches_fixed[self.idx]], patch_width, patch_height,
+                                             projection)
+
             moving = nuclei_centered_mip(self.arr_moving, moving_blobs[matches_moving[self.idx]], patch_width,
                                             patch_height, projection)
 
             self.img_fixed = ax_fixed.imshow(fixed)
-            self.img_moving = ax_moving.imshow(reg)
-            self.img_reg = ax_reg.imshow(reg, cmap='Greens')
-            self.img_reg_overlay = ax_reg.imshow(fixed, cmap='Reds', alpha=0.5)
+            self.img_moving = ax_moving.imshow(moving)
+
+            if arr_reg is not None:
+                self.img_reg = ax_reg.imshow(reg, cmap='Greens')
+                self.img_reg_overlay = ax_reg.imshow(fixed, cmap='Reds', alpha=0.5)
 
             ax_fixed.scatter(patch_width // 2 - 1, patch_width // 2 - 1, s=500, facecolors='none', edgecolors='b')
             ax_moving.scatter(patch_width // 2 - 1, patch_height // 2 - 1, s=500, facecolors='none', edgecolors='b')
@@ -139,10 +145,11 @@ def manual_accuracy(fixed_blobs, moving_blobs, matches_fixed, matches_moving, pa
             self.img_fixed.autoscale()
             self.img_moving.set_data(moving)
             self.img_moving.autoscale()
-            self.img_reg.set_data(reg)
-            self.img_reg.autoscale()
-            self.img_reg_overlay.set_data(fixed)
-            self.img_reg_overlay.autoscale()
+            if reg is not None:
+                self.img_reg.set_data(reg)
+                self.img_reg.autoscale()
+                self.img_reg_overlay.set_data(fixed)
+                self.img_reg_overlay.autoscale()
             self.fig.canvas.draw()
 
         def press(self, event):
@@ -156,7 +163,10 @@ def manual_accuracy(fixed_blobs, moving_blobs, matches_fixed, matches_moving, pa
                 return
             self.idx = self.match_acc.next_match_idx()
             fixed = nuclei_centered_mip(self.arr_fixed, fixed_blobs[matches_fixed[self.idx]], patch_width, patch_height, projection)
-            reg = nuclei_centered_mip(self.arr_reg, fixed_blobs[matches_fixed[self.idx]], patch_width, patch_height, projection)
+            if self.arr_reg is not None:
+                reg = nuclei_centered_mip(self.arr_reg, fixed_blobs[matches_fixed[self.idx]], patch_width, patch_height, projection)
+            else:
+                reg = None
             moving = nuclei_centered_mip(self.arr_moving, moving_blobs[matches_moving[self.idx]], patch_width, patch_height, projection)
             self.update_images(fixed, moving, reg)
 
@@ -185,32 +195,36 @@ def distance_map(fixed_blobs, matches_fixed, voxel_dim, x, y, z, max_dist=1000):
 
 
 def main():
-    working_dir = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde'
+    working_dir = '/home/jswaney/org_registration'
+    fixed_dir = 'round1'
+    moving_dir = 'round2'
 
     projection = 8
     patch_height = 128
     patch_width = 128
 
-    fixed_blobs = np.load(os.path.join(working_dir, 'fixed', 'blobs.npy'))
-    moving_blobs = np.load(os.path.join(working_dir, 'moving', 'blobs.npy'))
+    fixed_blobs = np.load(os.path.join(working_dir, fixed_dir, 'blobs.npy'))
+    moving_blobs = np.load(os.path.join(working_dir, moving_dir, 'blobs.npy'))
     print("Loaded {} fixed points".format(fixed_blobs.shape[0]))
     print("Loaded {} moving points".format(moving_blobs.shape[0]))
 
-    matches_fixed = np.load(os.path.join(working_dir, 'fixed', 'match_idx.npy'))
-    matches_moving = np.load(os.path.join(working_dir, 'moving', 'match_idx.npy'))
+    matches_fixed = np.load(os.path.join(working_dir, fixed_dir, 'match_idx.npy'))
+    matches_moving = np.load(os.path.join(working_dir, moving_dir, 'match_idx.npy'))
     print("Loaded {} matching indices".format(matches_fixed.size))
 
-    arr_fixed = io.zarr.open(os.path.join(working_dir, 'fixed', 'zarr_zstd', '1_1_1'))
-    arr_moving = io.zarr.open(os.path.join(working_dir, 'moving', 'zarr_zstd', '1_1_1'))
-    arr_reg = io.zarr.open(os.path.join(working_dir, 'moving', 'registered', '1_1_1'))
+    arr_fixed = io.zarr.open(os.path.join(working_dir, fixed_dir, 'syto16.zarr', '1_1_1'))
+    arr_moving = io.zarr.open(os.path.join(working_dir, moving_dir, 'syto16.zarr', '1_1_1'))
+    # arr_reg = io.zarr.open(os.path.join(working_dir, moving_dir, 'registered', '1_1_1'))
+    arr_reg = None
     print("Opened fixed image with shape {}".format(arr_fixed.shape))
     print("Opened moving image with shape {}".format(arr_moving.shape))
-    print("Opened registered image with shape {}".format(arr_reg.shape))
+    if arr_reg is not None:
+        print("Opened registered image with shape {}".format(arr_reg.shape))
 
-    # print("Starting GUI for manual assessment of matching accuracy")
-    # match_acc = manual_accuracy(fixed_blobs, moving_blobs, matches_fixed, matches_moving, patch_width, patch_height,
-    #                             projection, arr_fixed, arr_moving, arr_reg)
-    # match_acc.save(os.path.join(working_dir, 'match_acc.pkl'))
+    print("Starting GUI for manual assessment of matching accuracy")
+    match_acc = manual_accuracy(fixed_blobs, moving_blobs, matches_fixed, matches_moving, patch_width, patch_height,
+                                projection, arr_fixed, arr_moving, arr_reg)
+    match_acc.save(os.path.join(working_dir, 'match_acc.pkl'))
 
     #
     # step = 20
