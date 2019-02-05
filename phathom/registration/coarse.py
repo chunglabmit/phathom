@@ -293,7 +293,7 @@ def optimize(source, target, center=None, t0=None, theta0=None, s0=1, niter=10):
                                     target,
                                     center),
                            'bounds': bounds,
-                           'tol': 0.001,
+                           'tol': 0.0001,
                            'options': {'disp': False}
                        },
                        disp=True)
@@ -328,12 +328,20 @@ def _scale_rigid_params(t, center, factors):
     return t*f, center*f
 
 
-def coarse_registration(source, target, threshold, optimizer, min_size=10, use_hull=True):
-    source_mask = threshold_img(source, threshold)
-    target_mask = threshold_img(target, threshold)
+def coarse_registration(source, target, threshold, optimizer, min_size=None, use_hull=True):
+    if isinstance(threshold, list):
+        source_mask = threshold_img(source, threshold[0])
+        target_mask = threshold_img(target, threshold[1])
+    else:
+        source_mask = threshold_img(source, threshold)
+        target_mask = threshold_img(target, threshold)
 
-    source_no_small = remove_small_objects(source_mask, min_size=min_size)
-    target_no_small = remove_small_objects(target_mask, min_size=min_size)
+    if min_size is not None:
+        source_no_small = remove_small_objects(source_mask, min_size=min_size)
+        target_no_small = remove_small_objects(target_mask, min_size=min_size)
+    else:
+        source_no_small = source_mask
+        target_no_small = target_mask
 
     if use_hull:
         source_hull = convex_hull(source_no_small)

@@ -201,8 +201,8 @@ def register_chunk(moving_img, fixed_img, output_img, values, start, chunks, pad
         moving_start, moving_stop, moving_grid = result
         # Get the chunk of moving data
         # TODO: this is the next thing to optimize... could load into memory
-        # moving_data = utils.extract_box(moving_img, moving_start, moving_stop)  # decompresses data from disk
-        moving_data = utils.extract_box(moving_img_ram, moving_start, moving_stop)
+        moving_data = utils.extract_box(moving_img, moving_start, moving_stop)  # decompresses data from disk
+        # moving_data = utils.extract_box(moving_img_ram, moving_start, moving_stop)
         if not np.any(moving_data):
             interp_chunk = np.zeros(chunk_shape, output_img.dtype)
         else:
@@ -229,22 +229,23 @@ def register(moving_img, fixed_img, output_img, values, chunks, nb_workers, padd
     local_indices_default = np.indices(chunks)
 
     # Load moving img
-    moving_img_ram = zarr.create(shape=moving_img.shape,
-                                 chunks=moving_img.chunks,
-                                 dtype=moving_img.dtype,
-                                 compressor=Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE))
+    # moving_img_ram = zarr.create(shape=moving_img.shape,
+    #                              chunks=moving_img.chunks,
+    #                              dtype=moving_img.dtype,
+    #                              compressor=Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE))
     # zarr.copy_store(moving_img.store, moving_img_ram.store)
     # print(moving_img_ram.store)
     # moving_img_ram[:] = moving_img[:]
-    moving_img_ram[:] = moving_img
+    # moving_img_ram[:] = moving_img
+
+    print('here')
 
     start_coords = chunk_coordinates(output_img.shape, chunks)
-    # start_coords = start_coords[330000:]
+
     args_list = []
     for i, start_coord in tqdm(enumerate(start_coords), total=len(start_coords)):
         start = np.asarray(start_coord)
         args = (moving_img, fixed_img, output_img, values, start, chunks, padding)
-        # args_list.append(args)
         register_chunk(*args)
 
     # with multiprocessing.Pool(nb_workers) as pool:
@@ -257,12 +258,11 @@ def main():
     from phathom import io
     import matplotlib.pyplot as plt
 
-    # working_dir = '/media/jswaney/Drive/Justin/coregistration/whole_brain_tde'
-    working_dir = '/home/jswaney/coregistration'
+    working_dir = '/media/jswaney/Drive/Justin/marmoset'
 
     # Open images
-    fixed_zarr_path = 'fixed/zarr_stack/1_1_1'
-    moving_zarr_path = 'moving/zarr_stack/1_1_1'
+    fixed_zarr_path = 'round1/syto16.zarr/1_1_1'
+    moving_zarr_path = 'round2/syto16.zarr/1_1_1'
 
     # Load the grid values and fit the interpolator
     grid_path = 'grid_values.npy'
@@ -276,7 +276,7 @@ def main():
     moving_img = io.zarr.open(os.path.join(working_dir, moving_zarr_path), mode='r')
 
     # Create a new zarr array for the registered image
-    nonrigid_zarr_path = 'moving/registered6/1_1_1'
+    nonrigid_zarr_path = 'round2/registered2/1_1_1'
 
     nonrigid_img = io.zarr.new_zarr(os.path.join(working_dir,
                                                  nonrigid_zarr_path),

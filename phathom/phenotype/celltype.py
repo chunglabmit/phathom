@@ -4,7 +4,7 @@ import warnings
 import numpy as np
 import tqdm
 from sklearn.neighbors import NearestNeighbors, kneighbors_graph
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.cluster import AgglomerativeClustering, MiniBatchKMeans
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.interpolate import griddata
@@ -23,10 +23,11 @@ from phathom.segmentation.segmentation import (eigvals_of_weingarten,
 
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
+from tqdm import tqdm
 import torch
-use_cuda = torch.cuda.is_available()
-if use_cuda:
-    from phathom.segmentation.segmentation import cpu_eigvals_of_weingarten
+#use_cuda = torch.cuda.is_available()
+#if use_cuda:
+#    from phathom.segmentation.segmentation import cpu_eigvals_of_weingarten
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -38,7 +39,7 @@ def smooth(image, sigma):
 
 
 def calculate_eigvals(g):
-    eigvals = cpu_eigvals_of_weingarten(g)
+    eigvals = eigvals_of_weingarten(g)
     return eigvals
 
 
@@ -342,6 +343,13 @@ def cluster(features, n_clusters=2, connectivity=None):
     return region_labels
 
 
+def kmeans(features, n_clusters, random_state=0, batch_size=100, max_iter=10):
+    return MiniBatchKMeans(n_clusters=n_clusters,
+                           random_state=random_state,
+                           batch_size=batch_size,
+                           max_iter=max_iter).fit(features)
+
+
 def voronoi(pts):
     return Voronoi(pts)
 
@@ -359,6 +367,31 @@ def voronoi_plot(vor, labels=None):
     plt.show()
 
 
-def rasterize_regions(pts, labels, shape):
-    grid_z, grid_y, grid_x = np.mgrid[0:shape[0], 0:shape[1], 0:shape[2]]
-    return griddata(pts, labels, (grid_z, grid_y, grid_x), method='nearest').astype(np.uint8)
+rasterized = None
+
+
+def _rasterize_chunk(args):
+    start, shape, chunks, pts, labels = args
+    global rasterized
+    stop = np.minimum(shape, start + np.asarray(chunks))
+    grid_z, grid_y, grid_x = np.mgrid[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]]
+    data = griddata(pts, labels, (grid_z, grid_y, grid_x), method='nearest').astype(np.uint8)
+    rasterized = utils.insert_box(rasterized, start, stop, data)
+
+
+def rasterize_regions(pts, labels, shape, chunks=None, nb_workers=None):
+    global rasterized
+    if nb_workers is None:
+        nb_workers = multiprocessing.cpu_count()
+    if chunks is None:
+        grid_z, grid_y, grid_x = np.mgrid[0:shape[0], 0:shape[1], 0:shape[2]]
+        rasterized = griddata(pts, labels, (grid_z, grid_y, grid_x), method='nearest').astype(np.uint8)
+    else:
+        chunk_coords = utils.chunk_coordinates(shape, chunks)
+        args_list = []
+        for start in tqdm(chunk_coords, total=len(chunk_coords)):
+            args_list.append((start, shape, chunks, pts, labels))
+        rasterized = utils.SharedMemory(shape=shape, dtype=np.uint8)
+        with multiprocessing.Pool(processes=nb_workers) as pool:
+            list(tqdm(pool.imap(_rasterize_chunk, args_list), total=len(args_list)))
+    return rasterized

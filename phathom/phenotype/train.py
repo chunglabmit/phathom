@@ -12,7 +12,7 @@ from .models import AuxiliaryDeepGenerativeModel
 from .inference import SVI, DeterministicWarmup, ImportanceWeightedSampler
 from .utils import onehot
 
-working_dir = '/home/jswaney/pv_gabi'
+working_dir = '/home/jswaney/patches'
 
 cuda = torch.cuda.is_available()
 np.random.seed(333)
@@ -22,18 +22,21 @@ z_dim = 100
 a_dim = 100
 h_dim = [500, 500]
 
-model = AuxiliaryDeepGenerativeModel([1024, y_dim, z_dim, a_dim, h_dim])
+model = AuxiliaryDeepGenerativeModel([31*31*3, y_dim, z_dim, a_dim, h_dim])
 
 
 def tiff_loader(path):
-    img = tifffile.imread(path).astype(np.float32)
+    img = tifffile.imread(path)
     img = (img - img.min()) / (img.max() - img.min())
-    img = img[..., np.newaxis]
+    # mu = img.mean()
+    # stdev = img.std()
+    # img = (img - mu) / stdev  # normalize the data
+    # img = img[..., np.newaxis]
     return img
 
 
 def get_dataloaders(working_dir, subset_frac, valid_split, batch_size, nb_workers):
-    flatten_bernoulli = lambda x: transforms.ToTensor()(x).view(-1).bernoulli()
+    flatten_bernoulli = lambda x: transforms.ToTensor()(x).contiguous().view(-1).bernoulli()
 
     unlabeled_dataset = DatasetFolder(root=os.path.join(working_dir, 'unlabeled'),
                                       loader=tiff_loader,
@@ -84,7 +87,7 @@ def get_dataloaders(working_dir, subset_frac, valid_split, batch_size, nb_worker
     return unlabeled, labeled, validation
 
 
-unlabeled, labeled, validation = get_dataloaders(working_dir, subset_frac=0.1, valid_split=0.5, batch_size=64, nb_workers=0)
+unlabeled, labeled, validation = get_dataloaders(working_dir, subset_frac=0.002, valid_split=0.2, batch_size=64, nb_workers=0)
 
 
 beta = 0.1
@@ -93,6 +96,10 @@ alpha = beta * (len(unlabeled) + len(labeled)) / len(labeled)
 
 def binary_cross_entropy(r, x):
     return -torch.sum(x * torch.log(r + 1e-8) + (1 - x) * torch.log(1 - r + 1e-8), dim=-1)
+
+
+def mse(x, xhat):
+    return torch.mean((x - xhat)**2, dim=-1)
 
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.999))

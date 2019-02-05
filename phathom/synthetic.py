@@ -6,6 +6,8 @@ The synthetic data is useful for initial testing of image processing code.
 """
 import numpy as np
 from skimage.filters import gaussian
+from tqdm import tqdm
+from phathom.utils import insert_box
 
 
 def random_points(n, shape):
@@ -38,7 +40,7 @@ def random_points(n, shape):
     return np.unravel_index(idx, shape)
 
 
-def points_to_binary(points, shape, dtype='uint8', cval=255):
+def points_to_binary(points, shape, dtype='uint8', cval=255, size=1):
     """Convert `points` to a binary image of size `shape` with hot pixels at each point
 
     Parameters
@@ -51,6 +53,8 @@ def points_to_binary(points, shape, dtype='uint8', cval=255):
         data type of the output image
     cval : int or float, optional
         intensity value to place at all points
+    size : int, optional
+        width of each point in the binary image
 
     Returns
     -------
@@ -68,7 +72,14 @@ def points_to_binary(points, shape, dtype='uint8', cval=255):
     except TypeError:
         raise ValueError('points and shape need to be array-like')
     binary = np.zeros(shape, dtype=dtype)
-    binary[points] = cval
+    if size == 1:
+        binary[points] = cval
+    else:
+        radius = size // 2
+        for coords in tqdm(zip(*points), total=len(points[0])):
+            start = np.asarray(coords, np.int) - radius
+            stop = np.asarray(coords, np.int) + radius
+            binary = insert_box(binary, start, stop, cval)
     return binary
 
 

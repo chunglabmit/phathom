@@ -482,12 +482,13 @@ def _watershed_probability_chunk(input_tuple, output, centers, mask, overlap, **
                                        mask_overlap,
                                        watershed_line=True)
     binary_overlap = (labels_overlap > 0)
-    binary_overlap_eroded = ndi.binary_erosion(binary_overlap)
+    # binary_overlap_eroded = ndi.binary_erosion(binary_overlap)
 
     # write the segmentation result
     start_local = start_coord - start_ghosted
     stop_local = np.minimum(start_local + np.asarray(chunks), np.asarray(arr.shape) - start_ghosted)
-    binary_seg = utils.extract_box(binary_overlap_eroded, start_local, stop_local)
+    # binary_seg = utils.extract_box(binary_overlap_eroded, start_local, stop_local)
+    binary_seg = utils.extract_box(binary_overlap, start_local, stop_local)
     stop_coord = start_coord + np.asarray(binary_seg.shape)
     utils.insert_box(output, start_coord, stop_coord, binary_seg)
 

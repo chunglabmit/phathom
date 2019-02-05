@@ -470,6 +470,8 @@ def register_slice(moving_img, zslice, output_shape, transformation, batch_size=
     moving_stop = tuple(min(e, s) for e, s in zip(moving_img.shape, transformed_stop))
     moving_coords_local = moving_coords - np.array(moving_start)
 
+    print(moving_start, moving_stop)
+
     moving_data = moving_img[moving_start[0]:moving_stop[0],
                              moving_start[1]:moving_stop[1],
                              moving_start[2]:moving_stop[2]]

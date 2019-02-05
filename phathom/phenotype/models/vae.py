@@ -81,12 +81,13 @@ class Decoder(nn.Module):
 
         self.reconstruction = nn.Linear(h_dim[-1], x_dim)
 
-        self.output_activation = nn.Sigmoid()
+        self.output_activation = nn.Sigmoid()  # was sigmoid
 
     def forward(self, x):
         for layer in self.hidden:
             x = F.relu(layer(x))
         return self.output_activation(self.reconstruction(x))
+        # return self.reconstruction(x)
 
 
 class VariationalAutoencoder(nn.Module):
