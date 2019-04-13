@@ -215,7 +215,7 @@ def nuclei_centered_intensities(image, centers, radius, mode='cube', nb_workers=
         raise ValueError('Only cube sampling is currently supported')
 
     with multiprocessing.Pool(nb_workers) as pool:
-        intensities = list(tqdm.tqdm(pool.imap(f, centers), total=centers.shape[0]))
+        intensities = list(tqdm(pool.imap(f, centers), total=centers.shape[0]))
 
     return intensities
 

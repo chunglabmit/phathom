@@ -151,7 +151,8 @@ def zarr_to_tifs(zarr_path, output_dir, nb_workers=1, compress=0, in_memory=Fals
         for z in arr.shape[0]:
             slice_to_tiff(arr, z, output_dir)
     else:
-        z_arr = zarr.open(zarr_path, mode='r')
+        # z_arr = zarr.open(zarr_path, mode='r')
+        z_arr = io.zarr.open(zarr_path, mode='r')
         with multiprocessing.Pool(nb_workers) as pool:
             args = []
             for z in range(z_arr.shape[0]):
