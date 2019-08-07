@@ -7,7 +7,10 @@ except:
     from sklearn.manifold import TSNE
 from tqdm import tqdm
 from phathom.preprocess.filtering import gaussian_blur
-from mayavi import mlab
+try:
+    from mayavi import mlab
+except:
+    mlab = None
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import seaborn as sns
