@@ -492,3 +492,78 @@ class SharedMemory:
             memory = np.frombuffer(self.mmap, self.shape, self.dtype)
             yield memory
             del memory
+
+
+def write_one_zarr(memory, zarr, offset, start, stop):
+    with memory.txn() as m:
+        zarr[offset[0]+start[0]:offset[0]+stop[0],
+             offset[1]+start[1]:offset[1]+stop[1],
+             offset[2]+start[2]:offset[2]+stop[2]] = \
+        m[start[0]:stop[0], start[1]:stop[1], start[2]:stop[2]]
+
+
+def shared_memory_to_zarr(memory, zarr, pool, offset, start=None, stop=None):
+    """
+    Copy memory to ZARR array.
+
+    Note:  offset, start and stop must be on chunk boundaries of the zarr array
+
+    :param memory: the memory array to copy to zarr
+    :param zarr: the zarr array
+    :param offset: the 3-tuple offset of the destination for the memory in
+    the zarr array
+    :param start: the 3-tuple start coordinates of the memory
+    :param stop: the 3-tuple stop coordinates of the memory
+    :param pool: the multiprocessing pool to use
+    """
+    chunksize = zarr.chunks
+    shape = memory.shape
+    all_starts, all_stops = get_chunk_coords(chunksize, shape, start, stop)
+    args = [(memory, zarr, offset, a, b) for a, b in zip(all_starts, all_stops)]
+    pool.starmap(write_one_zarr, args)
+
+
+def get_chunk_coords(chunksize, shape, start, stop):
+    """
+    Get a sequence of chunk start coordinates and stop coordinates, given
+     a volume delimited by start and stop coordinates
+
+    :param chunksize: the size of a chunk in the zarr or blockfs array
+    :param shape: the shape of the zarr or blockfs array to handle edge case
+    :param start: a three-tuple of start coordinates, on a chunk boundary
+    :param stop: a three-tuple of stop coordinates, on a chunk boundary
+    :return: a sequence/iterator of start coordinates and of stop coordinates
+    giving the dimensions for each chunk in the volume
+    """
+    if start is None:
+        start = (0, 0, 0)
+    if stop is None:
+        stop = shape
+    starts = [np.arange(a, b, c) for a, b, c in zip(start, stop, chunksize)]
+    stops = [np.minimum(a + b, c) for a, b, c in
+             zip(starts, chunksize, shape)]
+    all_starts = product(*starts)
+    all_stops = product(*stops)
+    return all_starts, all_stops
+
+
+def memory_to_blockfs(memory, blockfs_dir, offset, start=None, stop=None):
+    """
+    Write a block of memory to a Blockfs directory
+
+    :param memory: the memory to be written
+    :param blockfs_dir: the BlockFS directory to be written to. This must be
+    opened and the writer processes must have been started.
+    :param offset: the offset into the blockfs of the memory (a 3-tuple)
+    :param start: a three-tuple of start coordinates within the memory. Default
+    is from the start of memory.
+    :param stop: a three-tuple of stop coordinates within the memory. Default
+    is to the end of memory.
+    """
+    chunksize = (blockfs_dir.z_block_size, blockfs_dir.y_block_size,
+                 blockfs_dir.x_block_size)
+    shape = memory.shape
+    for (z0, y0, x0), (z1, y1, x1) in zip(*get_chunk_coords(
+        chunksize, shape, start, stop)):
+        blockfs_dir.write_block(memory[z0:z1, y0:y1, x0:x1],
+                                x0 + offset[2], y0+offset[1], z0+offset[0])

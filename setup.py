@@ -30,6 +30,7 @@ setup(
               "phathom.atlas",
               "phathom.db",
               "phathom.io",
+              "phathom.pipeline",
               "phathom.phenotype",
               "phathom.preprocess",
               "phathom.registration",
@@ -37,7 +38,9 @@ setup(
               ],
     entry_points={ 'console_scripts': [
         'phathom-segmentation=phathom.segmentation:main',
-        'phathom-score-centroids=phathom.score:main'
+        'phathom-score-centroids=phathom.score:main',
+        'phathom-preprocess=phathom.pipeline.preprocess_cmd:main',
+        'phathom-rigid-registration=phathom.pipeline.rigid_registration_cmd:main'
     ]},
     url="https://github.com/chunglabmit/phathom",
     license="MIT",
