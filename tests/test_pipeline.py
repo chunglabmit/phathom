@@ -1,4 +1,5 @@
 import contextlib
+import json
 import numpy as np
 import os
 import shutil
@@ -12,7 +13,8 @@ try:
 except ImportError:
     haz_blockfs = False
 
-from phathom.pipeline.preprocess_cmd import main
+from phathom.pipeline.preprocess_cmd import main as preprocess_main
+from phathom.pipeline.geometric_features_cmd import main as gf_main
 
 @contextlib.contextmanager
 def make_stack(shape):
@@ -29,7 +31,7 @@ def make_stack(shape):
 class TestPreprocess(unittest.TestCase):
     def test_tiff(self):
         with make_stack((10, 20, 20)) as (inpath, outpath):
-            main([
+            preprocess_main([
                 "--input", inpath,
                 "--output", outpath,
                 "--output-format", "tiff"
@@ -43,9 +45,9 @@ class TestPreprocess(unittest.TestCase):
 
     def test_zarr(self):
         with make_stack((10, 20, 20)) as (inpath, outpath):
-            main([
+            preprocess_main([
                 "--input", inpath,
-                "--outpath", outpath,
+                "--output", outpath,
                 "--output-format", "zarr"
             ])
             z = zarr.open(outpath, "r")
@@ -55,7 +57,7 @@ class TestPreprocess(unittest.TestCase):
         def test_blockfs(self):
             with make_stack((10, 20, 20)) as (inpath, outpath):
                 blockfs_path = os.path.join(outpath, "test.blockfs")
-                main([
+                preprocess_main([
                     "--input", inpath,
                     "--output", blockfs_path,
                     "--output-format", "blockfs"
@@ -63,6 +65,34 @@ class TestPreprocess(unittest.TestCase):
                 d = Directory.open(blockfs_path)
                 self.assertSequenceEqual(d.read_block(0, 0, 0).shape,
                                          (10, 20, 20))
+
+
+@contextlib.contextmanager
+def make_points_case(points:np.ndarray):
+    infile = tempfile.mktemp(".json")
+    outfile = tempfile.mktemp(".npy")
+    with open(infile, "w") as fd:
+        json.dump(points.tolist(), fd)
+    yield infile, outfile
+    os.remove(infile)
+    if os.path.exists(outfile):
+        os.remove(outfile)
+
+class TestGeometricFeatures(unittest.TestCase):
+
+    def test_01_simple(self):
+        inpoints = np.random.RandomState(1234).uniform(size=(5, 3))
+        with make_points_case(inpoints) as (infile, outfile):
+            gf_main([
+                "--input", infile,
+                "--output", outfile
+            ])
+            self.assertTrue(os.path.exists(outfile))
+            features = np.load(outfile)
+            self.assertEqual(len(features), 5)
+
+
+
 
 if __name__ == '__main__':
     unittest.main()

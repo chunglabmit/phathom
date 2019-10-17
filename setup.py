@@ -2,6 +2,14 @@ from setuptools import setup, find_packages
 
 version = "0.1.0"
 
+CONSOLE_SCRIPTS = [
+    'phathom-segmentation=phathom.segmentation:main',
+    'phathom-score-centroids=phathom.score:main',
+    'phathom-preprocess=phathom.pipeline.preprocess_cmd:main',
+    'phathom-rigid-registration=phathom.pipeline.rigid_registration_cmd:main',
+    'phathom-geometric-features=phathom.pipeline.geometric_features_cmd:main'
+]
+
 with open("./README.md") as fd:
     long_description = fd.read()
 
@@ -36,12 +44,9 @@ setup(
               "phathom.registration",
               "phathom.segmentation"
               ],
-    entry_points={ 'console_scripts': [
-        'phathom-segmentation=phathom.segmentation:main',
-        'phathom-score-centroids=phathom.score:main',
-        'phathom-preprocess=phathom.pipeline.preprocess_cmd:main',
-        'phathom-rigid-registration=phathom.pipeline.rigid_registration_cmd:main'
-    ]},
+    entry_points={
+        'console_scripts': CONSOLE_SCRIPTS
+    },
     url="https://github.com/chunglabmit/phathom",
     license="MIT",
     classifiers=[
