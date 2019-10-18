@@ -24,6 +24,8 @@ detect-blobs is part of the [eflash_2018](https://github.com/chunglabmit/eflash_
 package
 * *phathom-geometric-features*: Calculate geometric features from
 the detected blobs from both the moving and fixed stacks.
+* *phathom-find-neighbors*: Match neighboring blobs within a search
+radius.
 
 ## Commands
 
