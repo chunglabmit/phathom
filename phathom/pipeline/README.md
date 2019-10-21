@@ -26,6 +26,8 @@ package
 the detected blobs from both the moving and fixed stacks.
 * *phathom-find-neighbors*: Match neighboring blobs within a search
 radius.
+* *phathom-filter-matches*: Filter matches based on re-estimation
+of affine transform using ransac.
 
 ## Commands
 
@@ -123,3 +125,47 @@ is "1.8,1.8,2.0" which is the voxel size used in the Chung lab
 when imaging at 4x.
 * **n-workers** is the number of worker processes used when computing
 the geometric features.
+
+### *phathom-filter-matches*
+
+*phathom-filter-matches* takes the matches from *find-neighbors* and
+uses RANSAC to create an affine transform model. It then filters
+the matches further based on the correspondence beteween fixed and
+moving pairs after applying the affine transform. The filterered
+point set and transform are written as the output.
+
+```bash
+phathom-filter-matches \
+    --input <input-path> \
+    --output <output-path> \
+    [--min-samples <min-samples>] \
+    [--max-distance <max-distance>] \
+    [--n-neighbors <n-neighbors> ] \
+    [--min-coherence <min-coherence> ] \
+    [--visualization-file <visualization-file> ] \
+    [--interactive ] \
+    [--residuals-file ] \
+    [--log-level ]
+```
+
+where:
+* **input-path** is the path to the input file, e.g. as produced by
+*phathom-find-neighbors*
+* **output-path** is the path to the output file from this program,
+an intermediate file, stored as a JSON dictionary with keys for the
+filtered sets of fixed and moving points and the pickled affine
+transform.
+* **min-samples** the minimum number of samples selected at random
+from the source points when making the model. Default is 30, must be
+more than four.
+* **max-distance** the maximum distance allowed between fixed and
+moving points after applying the affine transform
+* **n-neighbors** the number of alternate matches considered when
+caluclating the coherence distance. Default is 3
+* **min-coherence** the minimum coherence allowed. Default is .9, range
+is 0 to 1.
+* **visualization-file** the filename of the optional PDF of
+visualization plots
+* **interactive** to display the plots interactively
+* **log-level** The log level for logging, one of DEBUG, INFO,
+WARNING or ERROR. Default is WARNING.
