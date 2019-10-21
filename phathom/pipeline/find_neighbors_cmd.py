@@ -256,16 +256,29 @@ def main(args=sys.argv[1:]):
     transformation_dict = pickle_load(opts.rigid_transformation)
     fixed_features = np.load(opts.fixed_features)
     moving_features = np.load(opts.moving_features)
+    #
+    # The transform is from the fixed to the moving frame, in order
+    # to convert the moving image to the fixed frame of reference by
+    # translating the fixed coordinates to moving, then reading the values
+    # of the moving image.
+    #
+    # We need the opposite to convert the moving coordinates to the fixed
+    # frame of reference. That means the angle is the negative of the
+    # original and the offset is rotated by the angle
+    #
     logging.info("Transformation parameters:")
-    t = transformation_dict['t']
+    t_orig = transformation_dict['t']
+    theta_orig = transformation_dict['theta']
+    theta = -theta_orig
+    s_orig = transformation_dict['s']
+    r = rotation_matrix(theta)
+    s = 1 / s_orig
+    t = -r.dot(t_orig) * s
     logging.info("    Offset: %s" % str(t))
     center = transformation_dict['center']
     logging.info("    Center: %s" % str(center))
-    theta = np.pi * 2 - transformation_dict['theta']
     logging.info("    Thetas: %s" % str(theta * 180 / np.pi))
-    s = transformation_dict['s']
     logging.info("    Scale: %s" % str(s))
-    r = rotation_matrix(theta)
 
     logging.info("Applying rigid transformation to moving coordinates")
     xformed_moving_coords = rigid_transformation(
