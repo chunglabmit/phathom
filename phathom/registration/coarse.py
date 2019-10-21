@@ -237,8 +237,8 @@ def _registration_objective(x, source, target, center):
     """
     transformed_img = rigid_warp(source,
                                  t=x[:3],
-                                 thetas=x[3:-1],
-                                 s=x[-1],
+                                 thetas=x[3:6],
+                                 s=x[6] if len(x) > 6 else 1,
                                  center=center,
                                  output_shape=target.shape)
     return mse(target, transformed_img)
@@ -280,9 +280,15 @@ def optimize(source, target, center=None, t0=None, theta0=None, s0=1, niter=10):
         t0 = target_center - center
     if theta0 is None:
         theta0 = np.zeros_like(center)
-    bounds = [(-d, d) for d in target.shape] + [(-2*np.pi, 2*np.pi) for _ in range(3)] + [(-0.5, 2)]
+    bounds = [(-d, d) for d in target.shape] +\
+             [(-2*np.pi, 2*np.pi) for _ in range(3)]
+    if s0 is not None:
+        x0 = np.concatenate((t0, theta0, np.asarray([s0])))
+        bounds += [(-0.5, 2)]
+    else:
+        x0 = np.concatenate((t0, theta0))
     res = basinhopping(_registration_objective,
-                       x0=np.concatenate((t0, theta0, np.asarray([s0]))),
+                       x0=x0,
                        niter=niter,
                        T=1.0,
                        stepsize=0.1,
@@ -298,8 +304,11 @@ def optimize(source, target, center=None, t0=None, theta0=None, s0=1, niter=10):
                        },
                        disp=True)
     t_star = res.x[:3]
-    theta_star = res.x[3:-1]
-    s_star = res.x[-1]
+    theta_star = res.x[3:6]
+    if s0 is None:
+        s_star = 1
+    else:
+        s_star = res.x[-1]
     return t_star, theta_star, center, s_star
 
 

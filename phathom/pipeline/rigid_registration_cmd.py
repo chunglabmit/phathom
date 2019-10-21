@@ -76,6 +76,10 @@ def parse_args(args=sys.argv[1:]):
         "one will be automatically calculated",
         type=float)
     parser.add_argument(
+        "--no-scale",
+        help="Do not allow the rigid registration scale to vary from 1:1",
+        action="store_true")
+    parser.add_argument(
         "--moving-threshold",
         help="The threshold to use for the moving image. If not supplied, "
         "one will be automatically calculated",
@@ -183,7 +187,7 @@ def main(args=sys.argv[1:]):
     optim_kwargs = {'niter': opts.n_iter,
                     't0': t0,
                     'theta0': theta0,
-                    's0': 1}
+                    's0': None if opts.no_scale else opts.s0}
     threshold = [tmoving, tfixed]
 
     t_down, theta, center_down, s = coarse_registration(
