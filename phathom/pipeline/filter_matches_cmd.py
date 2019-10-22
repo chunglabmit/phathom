@@ -1,4 +1,5 @@
 import argparse
+import base64
 import json
 import logging
 import matplotlib.backends.backend_pdf
@@ -13,7 +14,6 @@ import typing
 from phathom import plotting
 from phathom.registration import registration as reg
 from phathom.registration.pcloud import estimate_affine, register_pts
-from phathom.utils import pickle_save, read_voxel_size
 from .find_neighbors_cmd import FindNeighborsData, plot_points
 
 
@@ -51,10 +51,11 @@ class FilterMatchesData:
         """
         d = {
             "fixed-coords": self.fixed_coords.astype(float)[:, ::-1].tolist(),
-            "moving_coords": self.moving_coords.astype(float)[:, ::-1].tolist(),
-            "affine_coords": self.affine_coords.astype(float)[:, ::-1].tolist(),
-            "voxel_size": self.voxel_size[::-1],
-            "affine_transform_fn": pickle.dumps(self.affine_transform_fn)
+            "moving-coords": self.moving_coords.astype(float)[:, ::-1].tolist(),
+            "affine-coords": self.affine_coords.astype(float)[:, ::-1].tolist(),
+            "voxel-size": self.voxel_size[::-1],
+            "affine-transform-fn": base64.b64encode(
+                pickle.dumps(self.affine_transform_fn)).decode("utf8")
         }
         with open(path, "w") as fd:
             json.dump(d, fd)
@@ -69,12 +70,13 @@ class FilterMatchesData:
         """
         with open(path) as fd:
             d = json.load(fd)
-        affine_transform_fn = pickle.loads(d["affine_transform_fn"])
+        affine_transform_fn = pickle.loads(
+            base64.b64decode(d["affine-transform-fn"]))
         return FilterMatchesData(
-            np.array(d["fixed_coords"])[:, ::-1],
-            np.array(d["moving_coords"])[:, ::-1],
-            np.array(d["affine_coords"])[:, ::-1],
-            d["voxel_size"][::-1],
+            np.array(d["fixed-coords"])[:, ::-1],
+            np.array(d["moving-coords"])[:, ::-1],
+            np.array(d["affine-coords"])[:, ::-1],
+            d["voxel-size"][::-1],
             affine_transform_fn)
 
 
@@ -159,6 +161,10 @@ def main(args=sys.argv[1:]):
         PDF.savefig(figure)
     starting_residuals = reg.match_distance(fixed_keypoints, moving_keypoints)
     if PDF is not None:
+        figure = pyplot.figure(figsize=(6, 6))
+        plotting.plot_residuals(fixed_keypoints, starting_residuals)
+        figure.suptitle("Starting residuals")
+        PDF.savefig(figure)
         figure = pyplot.figure(figsize=(6, 3))
         pyplot.hist(starting_residuals, bins=128)
         figure.suptitle("Starting ave. distance [um] = %.1f" %
@@ -179,6 +185,16 @@ def main(args=sys.argv[1:]):
     ransac_residuals = reg.match_distance(ransac_keypoints, moving_keypoints)
     logging.info("Average residual after applying affine xform: %.1f" %
                  np.mean(ransac_residuals))
+    if PDF is not None:
+        figure = pyplot.figure(figsize=(6, 6))
+        plotting.plot_residuals(ransac_keypoints, ransac_residuals)
+        figure.suptitle("Residuals after ransac affine")
+        PDF.savefig(figure)
+        figure = pyplot.figure(figsize=(6, 3))
+        pyplot.hist(ransac_residuals, bins=128)
+        figure.suptitle("Residuals after ransac affine")
+        PDF.savefig(figure)
+
     if opts.residuals_file is not None:
         df = pandas.DataFrame(dict(
             coarse=starting_residuals,
@@ -231,6 +247,10 @@ def main(args=sys.argv[1:]):
     coherent_residuals = reg.match_distance(affine_keypoints_coherent,
                                             moving_keypoints_coherent)
     if PDF is not None:
+        figure = pyplot.figure(figsize=(6, 6))
+        plotting.plot_residuals(affine_keypoints_coherent, coherent_residuals)
+        figure.suptitle("Points by residual after coherence filtering")
+        PDF.savefig(figure)
         figure = pyplot.figure(figsize=(6, 3))
         pyplot.hist(coherent_residuals, bins=128)
         figure.suptitle("Residuals after coherence filtering")
@@ -241,9 +261,11 @@ def main(args=sys.argv[1:]):
         fixed_keypoints_coherent,
         moving_keypoints_coherent,
         affine_keypoints_coherent,
-        voxel_size,
+        voxel_size[0].tolist(),
         affine_transformation)
     data.write(opts.output)
+    if PDF is not None:
+        PDF.close()
 
 
 if __name__ == "__main__":

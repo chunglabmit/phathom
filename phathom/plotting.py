@@ -135,6 +135,22 @@ def plot_mip(img, axis=0, clim=None):
     plt.imshow(img.max(axis=axis), clim=clim)
     plt.show()
 
+def plot_residuals(pts, residuals, cmap='jet', markersize=1):
+    """
+    Plot 3 axes using the residuals to color the points
+
+    :param pts: points to plot
+    :param residuals: the residuals (or whatever value you have) to pick the
+    point colors
+    """
+    for ax_idx, plot_idx in ((0, 1), (1, 2), (2, 4)):
+        y, x = np.delete(pts, ax_idx, 1).transpose()
+        plt.subplot(2, 2, plot_idx).scatter(x, y,
+                                            c=residuals,
+                                            s=markersize,
+                                            cmap=cmap,
+                                            marker="o")
+
 
 def zprojection(image, centers=None, zlim=None, clim=None):
     if zlim is None:

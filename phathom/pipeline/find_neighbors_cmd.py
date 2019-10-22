@@ -289,6 +289,7 @@ def main(args=sys.argv[1:]):
         PDF.savefig(figure)
     xformed_moving_coords_um = xformed_moving_coords * voxel_size
     fixed_coords_um = fixed_coords * voxel_size
+    moving_coords_um = moving_coords * voxel_size
 
     logging.info("Matching fixed to moving coords")
     idx_fixed, idx_moving = radius_matching(
@@ -322,7 +323,7 @@ def main(args=sys.argv[1:]):
     logging.info("Writing data")
     data = FindNeighborsData(
         fixed_coords = fixed_coords_um,
-        moving_coords = xformed_moving_coords_um,
+        moving_coords = moving_coords_um,
         fixed_features=fixed_features,
         moving_features=moving_features,
         voxel_size=voxel_size[0].astype(float).tolist(),
