@@ -169,3 +169,60 @@ visualization plots
 * **interactive** to display the plots interactively
 * **log-level** The log level for logging, one of DEBUG, INFO,
 WARNING or ERROR. Default is WARNING.
+
+### *phathom-fit-nonrigid-transform*
+
+*phathom-fit-nonrigid-transform* creates a pickled point transform
+function from the fixed volume space to the moving volume space.
+
+```bash
+phathom-fit-nonrigid-transform \
+    --input <input-path> \
+    --output <output-path> \
+    [--visualization-file <visualization-path>] \
+    [--interactive]\
+    [--max-samples <max-samples>] \
+    [--smoothing <smoothing>] \
+    [--grid-points <grid-points>] \
+    [--fixed-url <fixed-url>] \
+    [--moving-url <moving-url>] \
+    [--fixed-url-format <fixed-url-format>] \
+    [--moving-url-format <moving-url-format>] \
+    [--log-level <log-level>]
+```
+where
+* **input-path** is the input file from *phathom-filter-matches*
+
+* **output-path** is the pickled nonrigid transform
+
+* **visualization-file** is the path to the PDF file output by this
+  program. This file contains helpful visualizations that document the
+  program's progress.
+
+* **--interactive** if supplied, the program will display each of the
+  visualizations as they are created. Only supply if you have a display.
+
+* **max-samples** is the maximum number of samples to be used when
+  constructing the thin-plate spline
+
+* **smoothing** is the smoothing for the thin-plate spline
+
+* **grid-points** is the number of grid points in the X, Y and Z when
+  creating a bspline approximation
+
+* **fixed-url** is the Neuroglancer URL of the fixed volume, e.g.
+  "https://my-server.org/precomputed/fixed". This is only used to
+  visualize the overlap and is not needed for the basic calculation.
+
+* **moving-url** is the Neuroglancer URL of the moving volume, e.g.
+  "https://my-server.org/precomputed/fixed". This is only used to
+   visualize the overlap and is not needed for the basic calculation.
+
+* **fixed-url-format** is the data format of the fixed URL if it is a
+  file URL. Valid values are "blockfs", "tiff" or "zarr".
+
+* **moving-url-format** is the data format of the moving URL if it is a
+  file URL. Valid values are "blockfs", "tiff" or "zarr".
+
+* **log-level** is the log verbosity level. Default is WARNING, options
+  are DEBUG, INFO, WARNING and ERROR

@@ -9,7 +9,9 @@ CONSOLE_SCRIPTS = [
     'phathom-rigid-registration=phathom.pipeline.rigid_registration_cmd:main',
     'phathom-geometric-features=phathom.pipeline.geometric_features_cmd:main',
     'phathom-find-neighbors=phathom.pipeline.find_neighbors_cmd:main',
-    'phathom-filter-matches=phathom.pipeline.filter_matches_cmd:main'
+    'phathom-filter-matches=phathom.pipeline.filter_matches_cmd:main',
+    'phathom-fit-nonrigid-transform='
+    'phathom.pipeline.fit_nonrigid_transform_cmd:main'
 ]
 
 with open("./README.md") as fd:
