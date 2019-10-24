@@ -11,7 +11,8 @@ CONSOLE_SCRIPTS = [
     'phathom-find-neighbors=phathom.pipeline.find_neighbors_cmd:main',
     'phathom-filter-matches=phathom.pipeline.filter_matches_cmd:main',
     'phathom-fit-nonrigid-transform='
-    'phathom.pipeline.fit_nonrigid_transform_cmd:main'
+    'phathom.pipeline.fit_nonrigid_transform_cmd:main',
+    'phathom-warp-image=phathom.pipeline.warp_image:main'
 ]
 
 with open("./README.md") as fd:

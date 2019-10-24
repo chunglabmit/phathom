@@ -88,7 +88,10 @@ def main(args=sys.argv[1:]):
         (min(len(paths), 64), img0.shape[0], img0.shape[1]),
         img0.dtype)
     shape = (len(paths), img0.shape[0], img0.shape[1])
-    if args.output_format in (OF_BLOCKFS, OF_TIFF):
+    if args.output_format == OF_TIFF:
+        if not os.path.exists(args.output):
+            os.mkdir(args.output)
+    elif args.output_format == OF_BLOCKFS:
         if not os.path.exists(os.path.dirname(args.output)):
             os.mkdir(os.path.dirname(args.output))
     if args.output_format == OF_ZARR:
@@ -123,7 +126,8 @@ def main(args=sys.argv[1:]):
                         shared_memory_to_zarr(
                             shared_memory, dest, pool, (idx64, 0, 0))
                     else:
-                        memory_to_blockfs(m, dest, (idx64, 0, 0))
+                        memory_to_blockfs(
+                            m[:idx64_end-idx64], dest, (idx64, 0, 0))
     finally:
         if args.output_format == OF_BLOCKFS:
             dest.close()

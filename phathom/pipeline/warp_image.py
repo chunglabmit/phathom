@@ -1,0 +1,179 @@
+import argparse
+import multiprocessing
+import numpy as np
+import os
+from blockfs.directory import  Directory
+from precomputed_tif.blockfs_stack import BlockfsStack
+from precomputed_tif.client import read_chunk, get_info
+from phathom.registration.registration import chunk_coordinates
+from phathom.utils import pickle_load
+from scipy.ndimage import map_coordinates
+import sys
+import tqdm
+
+
+INPUT_URLS = []
+INPUT_FORMATS = []
+INPUT_SHAPES = []
+OUTPUT_STACKS = []
+OUTPUT_BLOCKFS_DIRS = []
+GRID_Z, GRID_Y, GRID_X = np.mgrid[0:64, 0:64, 0:64]
+INTERPOLATOR = None
+
+
+def parse_args(args=sys.argv[1:]):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--interpolator",
+        help="The interpolator output by phathom-fit-nonrigid-transform",
+        required=True)
+    parser.add_argument(
+        "--url",
+        help="The neuroglancer URL of the moving image. May be specified "
+        "multiple times.",
+        action="append")
+    parser.add_argument(
+        "--url-format",
+        help="The format of the URL if a file URL. Must be specified once "
+        "per URL if specified at all. Valid values are \"tiff\", \"zarr\" "
+        "and \"blockfs\". Default is blockfs",
+        action="append")
+    parser.add_argument(
+        "--output",
+        help="The location for the Neuroglancer data source for the warped "
+        "image. Must be specified once per input URL.",
+        action="append")
+    parser.add_argument(
+        "--n-workers",
+        help="The number of workers devoted to transforming coordinates",
+        default=os.cpu_count())
+    parser.add_argument(
+        "--n-writers",
+        help="The number of worker processes devoted to writing output data",
+        type=int,
+        default=min(12, os.cpu_count())
+    )
+    parser.add_argument(
+        "--n-levels",
+        help="The number of levels in each output volume",
+        type=int,
+        default=7)
+    parser.add_argument(
+        "--output-shape",
+        help="Output volume shape in x,y,z format. If not specified, it "
+        "will be the same as the shape of the first input volume."
+    )
+    parser.add_argument(
+        "--silent",
+        help="Do not print progress bars",
+        action="store_true"
+    )
+    return parser.parse_args(args)
+
+
+def write_level_1(opts):
+    xe = ye = ze = 0
+    for stack in OUTPUT_STACKS:
+        xe = max(xe, stack.x_extent)
+        ye = max(ye, stack.y_extent)
+        ze = max(xe, stack.z_extent)
+    starts = chunk_coordinates((ze, ye, xe), (64, 64, 64))
+    with multiprocessing.Pool(opts.n_workers) as pool:
+        futures = []
+        for start in starts:
+            futures.append(pool.apply_async(do_chunk, (start,)))
+        for future in tqdm.tqdm(futures, disable=opts.silent):
+            future.get()
+
+
+def do_chunk(start):
+    grid_in_x = GRID_X + start[2]
+    grid_in_y = GRID_Y + start[1]
+    grid_in_z = GRID_Z + start[0]
+    fgrid_out_z, fgrid_out_y, fgrid_out_x = INTERPOLATOR(
+        np.column_stack(
+            [_.flatten() for _ in (grid_in_z, grid_in_y, grid_in_x)]))\
+    .transpose()
+    grid_out_z = fgrid_out_z.reshape(*grid_in_z.shape)
+    grid_out_y = fgrid_out_y.reshape(*grid_in_y.shape)
+    grid_out_x = fgrid_out_x.reshape(*grid_in_x.shape)
+    for input_url, input_format, input_shape, output_dir in zip(
+        INPUT_URLS, INPUT_FORMATS, INPUT_SHAPES, OUTPUT_BLOCKFS_DIRS):
+        if start[0] >= output_dir.z_extent or \
+           start[1] >= output_dir.y_extent or \
+           start[2] >= output_dir.x_extent:
+            continue
+        shape_out = output_dir.get_block_size(start[2], start[1], start[0])
+        goz, goy, gox = [a[:shape_out[0], :shape_out[1], :shape_out[2]]
+                         for a in (grid_out_z, grid_out_y, grid_out_x)]
+        x_min = max(0, int(np.min(gox)))
+        x_max = min(int(np.max(gox)) + 1, input_shape[2])
+        y_min = max(0, int(np.min(goy)))
+        y_max = min(int(np.max(goy)) + 1, input_shape[1])
+        z_min = max(0, int(np.min(goz)))
+        z_max = min(int(np.max(goz)) + 1, input_shape[0])
+        if x_min >= x_max or\
+            y_min >= y_max or \
+            z_min >= z_max:
+            output_dir.write_block(np.zeros(shape_out, output_dir.dtype),
+                                   start[2], start[1], start[0])
+            continue
+        block = read_chunk(input_url, x_min, x_max, y_min, y_max, z_min, z_max,
+                           format=input_format)
+        pts = ((
+            (goz.flatten() - z_min),
+            (goy.flatten() - y_min),
+            (gox.flatten() - x_min)))
+        block_out = map_coordinates(block, pts).reshape(gox.shape)
+        output_dir.write_block(block_out, start[2], start[1], start[0])
+
+
+def write_level_n(opts, level):
+    for stack in OUTPUT_STACKS:
+        stack.write_level_n(level, silent=opts.silent, n_cores=opts.n_writers)
+
+
+def main(args=sys.argv[1:]):
+    opts = parse_args(args)
+    prepare(opts)
+    write_level_1(opts)
+    for directory in OUTPUT_BLOCKFS_DIRS:
+        directory.close()
+    for level in range(2, opts.n_levels+1):
+        write_level_n(opts, level)
+
+
+def prepare(opts):
+    global INTERPOLATOR
+    INTERPOLATOR = pickle_load(opts.interpolator)
+    if opts.output_shape is not None:
+        output_shape = [int(_) for _ in opts.output_shape.split(",")]
+    for i in range(len(opts.url)):
+        INPUT_URLS.append(opts.url[i])
+        info = get_info(opts.url[i])
+        xe, ye, ze = info.get_scale(1).shape
+        INPUT_SHAPES.append((ze, ye, xe))
+        if opts.output_shape is None:
+            output_shape = (ze, ye, xe)
+        if opts.url_format is None or len(opts.url_format) <= i:
+            INPUT_FORMATS.append("blockfs")
+        else:
+            INPUT_FORMATS.append(opts.url_format[i])
+        stack = BlockfsStack(output_shape, opts.output[i])
+        stack.write_info_file(opts.n_levels)
+        OUTPUT_STACKS.append(stack)
+        level_1_path = os.path.join(opts.output[i], "1_1_1",
+                                    BlockfsStack.DIRECTORY_FILENAME)
+        for dirname in (os.path.dirname(os.path.dirname(level_1_path)),
+                        os.path.dirname(level_1_path)):
+            if not os.path.isdir(dirname):
+                os.mkdir(dirname)
+        directory = Directory(xe, ye, ze, info.data_type, level_1_path,
+                              n_filenames=opts.n_writers)
+        directory.create()
+        directory.start_writer_processes()
+        OUTPUT_BLOCKFS_DIRS.append(directory)
+
+
+if __name__ == "__main__":
+    main()

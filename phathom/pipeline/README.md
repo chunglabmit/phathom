@@ -28,6 +28,10 @@ the detected blobs from both the moving and fixed stacks.
 radius.
 * *phathom-filter-matches*: Filter matches based on re-estimation
 of affine transform using ransac.
+* *phathom-fit-nonrigid-transform*: Create a transform for warping the
+moving image onto the fixed one.
+* *phathom-warp-image*: Warp moving images onto the fixed reference
+frame.
 
 ## Commands
 
