@@ -198,13 +198,15 @@ def convex_hull(mask):
     return hull
 
 
-def distance_transform(mask):
+def distance_transform(mask, sampling=None):
     """Calculate the distance transform of a binary mask
 
     Parameters
     ----------
     mask : ndarray
         binary mask
+    sampling : float or sequence of floats
+        the voxel size. The default is 1, 1, 1
 
     Returns
     -------
@@ -212,7 +214,7 @@ def distance_transform(mask):
         euclidian distance transform of `mask`
 
     """
-    return distance_transform_edt(mask)
+    return distance_transform_edt(mask, sampling=sampling)
 
 
 def _registration_objective(x, source, target, center):
@@ -337,7 +339,10 @@ def _scale_rigid_params(t, center, factors):
     return t*f, center*f
 
 
-def coarse_registration(source, target, threshold, optimizer, min_size=None, use_hull=True):
+def coarse_registration(source, target, threshold, optimizer,
+                        min_size=None,
+                        use_hull=True,
+                        sampling=None):
     if isinstance(threshold, list):
         source_mask = threshold_img(source, threshold[0])
         target_mask = threshold_img(target, threshold[1])
@@ -358,8 +363,8 @@ def coarse_registration(source, target, threshold, optimizer, min_size=None, use
         source_edt = distance_transform(source_hull)
         target_edt = distance_transform(target_hull)
     else:
-        source_edt = distance_transform(source_no_small)
-        target_edt = distance_transform(target_no_small)
+        source_edt = distance_transform(source_no_small, sampling=sampling)
+        target_edt = distance_transform(target_no_small, sampling=sampling)
 
     return optimize(source_edt, target_edt, **optimizer)
 

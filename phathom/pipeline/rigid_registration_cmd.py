@@ -4,6 +4,7 @@ import matplotlib.backends.backend_pdf
 import matplotlib.pyplot as pylab
 from precomputed_tif.client import get_info, read_chunk
 from skimage.filters import threshold_otsu
+from scipy.ndimage import gaussian_filter
 import sys
 
 from phathom.utils import pickle_save
@@ -71,6 +72,16 @@ def parse_args(args=sys.argv[1:]):
         help="the coordinates of the rotational center in the moving frame "
         "of reference. The default is the image centroid.")
     parser.add_argument(
+        "--voxel-size",
+        help="The voxel size in x,y,z order. Defaults to 1.8,1.8.2.0 which "
+        "is the voxel dimension for 4x images in the Chung Lab.",
+        default="1.8,1.8,2.0")
+    parser.add_argument(
+        "--sigma",
+        help="The sigma for the gaussian blur of each plane.",
+        default=0,
+        type=float)
+    parser.add_argument(
         "--fixed-threshold",
         help="The threshold to use for the fixed image. If not supplied, "
         "one will be automatically calculated",
@@ -136,6 +147,12 @@ def main(args=sys.argv[1:]):
         print("%s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" %
               opts.theta0)
         raise
+    try:
+        voxel_size = [float(_) for _ in opts.voxel_size.split(",")][::-1]
+    except ValueError:
+        print("Voxel size %s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" %
+              opts.voxel_size)
+        raise
     theta0 = (theta0z, theta0y, theta0x)
     moving_down = read_url(opts.moving_url,
                            opts.moving_url_format,
@@ -153,6 +170,11 @@ def main(args=sys.argv[1:]):
     fixed_down = read_url(opts.fixed_url,
                           opts.fixed_url_format,
                           opts.mipmap_level)
+    if opts.sigma != 0:
+        moving_down = gaussian_filter(moving_down.astype(np.float32),
+                                      (0, opts.sigma, opts.sigma))
+        fixed_down = gaussian_filter(fixed_down.astype(np.float32),
+                                     (0, opts.sigma, opts.sigma))
     if PDF is not None:
         figure = plot_alignment(fixed_down, moving_down, s0, 1, t0, theta0)
         figure.suptitle("Initial alignment")
@@ -195,7 +217,8 @@ def main(args=sys.argv[1:]):
         fixed_down,
         threshold,
         optim_kwargs,
-        use_hull=opts.use_hull)
+        use_hull=opts.use_hull,
+        sampling=voxel_size)
     if PDF is not None:
         figure = plot_alignment(fixed_down, moving_down, center_down,
                                 s, t_down, theta)
@@ -231,13 +254,12 @@ def plot_alignment(fixed, moving, center, s, t0, theta0):
     figure = pylab.figure(figsize=(6, 6))
     wmoving = rigid_warp(moving, t0, theta0, s, center, fixed.shape)
     cimg = np.column_stack([
-        fixed.flatten(),
-        wmoving.flatten(),
+        fixed.flatten() / np.max(fixed),
+        wmoving.flatten() / np.max(wmoving),
         np.zeros(np.prod(fixed.shape), fixed.dtype)]) \
         .reshape(fixed.shape[0],
                  fixed.shape[1],
                  fixed.shape[2], 3)
-    cimg = cimg.astype(float) / cimg.max()
     figure.add_subplot(2, 2, 1).imshow(cimg[cimg.shape[0] // 2])
     figure.add_subplot(2, 2, 2).imshow(cimg[:, cimg.shape[1] // 2])
     figure.add_subplot(2, 2, 4).imshow(cimg[:, :, cimg.shape[2] // 2])

@@ -237,7 +237,7 @@ def main(args=sys.argv[1:]):
     #
     # Filter out incoherent matches
     #
-    coherent_index = np.where(coherences < opts.min_coherence)
+    coherent_index = np.where(coherences > opts.min_coherence)[0]
     logging.info("Found %d outliers" % (len(coherences) - len(coherent_index)))
     fixed_keypoints_coherent = fixed_keypoints_dist[coherent_index]
     fixed_keypoints_coherent_vox = fixed_keypoints_coherent * um2voxel
