@@ -23,7 +23,7 @@ def parse_args(args=sys.argv[1:]):
                         help="Input file from phathom-filter-matches",
                         required=True)
     parser.add_argument("--output",
-                        help="Pickled nonrigid transform",
+                        help="Pickled nonrigid transform and grid values",
                         required=True)
     parser.add_argument(
         "--visualization-file",
@@ -143,7 +143,7 @@ def main(args=sys.argv[1:]):
     z = np.linspace(0, fixed_shape[0], nb_pts)
     y = np.linspace(0, fixed_shape[1], nb_pts)
     x = np.linspace(0, fixed_shape[2], nb_pts)
-    values = reg.warp_regular_grid(nb_pts, z, y, x, nonrigid_transform)
+    grid_values = reg.warp_regular_grid(nb_pts, z, y, x, nonrigid_transform)
     if PDF is not None:
         figure = pyplot.figure(figsize=(6, 6))
         #
@@ -151,18 +151,18 @@ def main(args=sys.argv[1:]):
         #
         half = nb_pts // 2
         figure.add_subplot(2, 2, 1).quiver(
-            values[2][half] - x.reshape(1, nb_pts),
-            values[1][half] - y.reshape(nb_pts, 1))
+            grid_values[2][half] - x.reshape(1, nb_pts),
+            grid_values[1][half] - y.reshape(nb_pts, 1))
         figure.add_subplot(2, 2, 2).quiver(
-            values[2][:, half] - x.reshape(1, nb_pts),
-            values[0][:, half] - z.reshape(nb_pts, 1))
+            grid_values[2][:, half] - x.reshape(1, nb_pts),
+            grid_values[0][:, half] - z.reshape(nb_pts, 1))
         figure.add_subplot(2, 2, 4).quiver(
-            values[1][:, :, half] - y.reshape(1, nb_pts),
-            values[0][:, :, half] - z.reshape(nb_pts, 1))
+            grid_values[1][:, :, half] - y.reshape(1, nb_pts),
+            grid_values[0][:, :, half] - z.reshape(nb_pts, 1))
         figure.suptitle("Warping grid vector displacement")
         PDF.savefig(figure)
-    grid_interp = reg.fit_grid_interpolator(z, y, x, values)
-    map_interp = reg.fit_map_interpolator(values, fixed_shape, order=1)
+    grid_interp = reg.fit_grid_interpolator(z, y, x, grid_values)
+    map_interp = reg.fit_map_interpolator(grid_values, fixed_shape, order=1)
     grid_interpolator = partial(reg.interpolator, interp=grid_interp)
     map_interpolator = partial(reg.interpolator, interp=map_interp)
     interp_keypoints_vox = map_interpolator(
@@ -216,7 +216,9 @@ def main(args=sys.argv[1:]):
         .reshape(fixed_img.shape[0], fixed_img.shape[1], 3)
         pyplot.imshow(cimg)
         PDF.savefig(figure)
-    pickle_save(opts.output, map_interpolator)
+    pickle_save(opts.output,
+                dict(interpolator=map_interpolator,
+                     grid_values=grid_values))
     if PDF is not None:
         PDF.close()
 

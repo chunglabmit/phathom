@@ -2,15 +2,15 @@ import argparse
 import multiprocessing
 import numpy as np
 import os
-from blockfs.directory import  Directory
+from blockfs.directory import Directory
 from precomputed_tif.blockfs_stack import BlockfsStack
-from precomputed_tif.client import read_chunk, get_info
+from precomputed_tif.client import read_chunk, get_info, ArrayReader
 from phathom.registration.registration import chunk_coordinates
+from phathom.registration.torch_reg import register
 from phathom.utils import pickle_load
 from scipy.ndimage import map_coordinates
 import sys
 import tqdm
-
 
 INPUT_URLS = []
 INPUT_FORMATS = []
@@ -19,6 +19,7 @@ OUTPUT_STACKS = []
 OUTPUT_BLOCKFS_DIRS = []
 GRID_Z, GRID_Y, GRID_X = np.mgrid[0:64, 0:64, 0:64]
 INTERPOLATOR = None
+GRID_VALUES = None
 
 
 def parse_args(args=sys.argv[1:]):
@@ -30,18 +31,18 @@ def parse_args(args=sys.argv[1:]):
     parser.add_argument(
         "--url",
         help="The neuroglancer URL of the moving image. May be specified "
-        "multiple times.",
+             "multiple times.",
         action="append")
     parser.add_argument(
         "--url-format",
         help="The format of the URL if a file URL. Must be specified once "
-        "per URL if specified at all. Valid values are \"tiff\", \"zarr\" "
-        "and \"blockfs\". Default is blockfs",
+             "per URL if specified at all. Valid values are \"tiff\", \"zarr\" "
+             "and \"blockfs\". Default is blockfs",
         action="append")
     parser.add_argument(
         "--output",
         help="The location for the Neuroglancer data source for the warped "
-        "image. Must be specified once per input URL.",
+             "image. Must be specified once per input URL.",
         action="append")
     parser.add_argument(
         "--n-workers",
@@ -61,11 +62,16 @@ def parse_args(args=sys.argv[1:]):
     parser.add_argument(
         "--output-shape",
         help="Output volume shape in x,y,z format. If not specified, it "
-        "will be the same as the shape of the first input volume."
+             "will be the same as the shape of the first input volume."
     )
     parser.add_argument(
         "--silent",
         help="Do not print progress bars",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--use-gpu",
+        help="Use a GPU to perform the warping computation",
         action="store_true"
     )
     return parser.parse_args(args)
@@ -86,22 +92,57 @@ def write_level_1(opts):
             future.get()
 
 
+def write_level_1_gpu(opts):
+    for input_url, input_format, input_shape, output_dir in zip(
+            INPUT_URLS, INPUT_FORMATS, INPUT_SHAPES, OUTPUT_BLOCKFS_DIRS):
+
+        ardr = ArrayReader(input_url, input_format)
+
+        #
+        # Register reads the fixed image to determine whether it is partially
+        # in-bounds. This returns all zeros if the key is out of bounds and
+        # returns a nonzero value otherwise
+        #
+        class MockFixedImg:
+            def __init__(self, input_shape):
+                self.input_shape = input_shape
+
+            def __getitem__(self, key):
+                for i in range(3):
+                    if key[i].start >= self.input_shape[i]:
+                        break
+                    if key[i].stop <= 0:
+                        break
+                else:
+                    return np.array([1], np.uint8)
+                return np.array([0], np.uint8)
+
+        chunks = (output_dir.z_block_size,
+                  output_dir.y_block_size,
+                  output_dir.x_block_size)
+        grid_values = np.array(GRID_VALUES).reshape(
+            3, 1, 1, *GRID_VALUES[0].shape)
+        register(ardr, MockFixedImg(input_shape), output_dir,
+                 grid_values,
+                 chunks, opts.n_workers)
+
+
 def do_chunk(start):
     grid_in_x = GRID_X + start[2]
     grid_in_y = GRID_Y + start[1]
     grid_in_z = GRID_Z + start[0]
     fgrid_out_z, fgrid_out_y, fgrid_out_x = INTERPOLATOR(
         np.column_stack(
-            [_.flatten() for _ in (grid_in_z, grid_in_y, grid_in_x)]))\
-    .transpose()
+            [_.flatten() for _ in (grid_in_z, grid_in_y, grid_in_x)])) \
+        .transpose()
     grid_out_z = fgrid_out_z.reshape(*grid_in_z.shape)
     grid_out_y = fgrid_out_y.reshape(*grid_in_y.shape)
     grid_out_x = fgrid_out_x.reshape(*grid_in_x.shape)
     for input_url, input_format, input_shape, output_dir in zip(
-        INPUT_URLS, INPUT_FORMATS, INPUT_SHAPES, OUTPUT_BLOCKFS_DIRS):
+            INPUT_URLS, INPUT_FORMATS, INPUT_SHAPES, OUTPUT_BLOCKFS_DIRS):
         if start[0] >= output_dir.z_extent or \
-           start[1] >= output_dir.y_extent or \
-           start[2] >= output_dir.x_extent:
+                start[1] >= output_dir.y_extent or \
+                start[2] >= output_dir.x_extent:
             continue
         shape_out = output_dir.get_block_size(start[2], start[1], start[0])
         goz, goy, gox = [a[:shape_out[0], :shape_out[1], :shape_out[2]]
@@ -112,9 +153,9 @@ def do_chunk(start):
         y_max = min(int(np.max(goy)) + 1, input_shape[1])
         z_min = max(0, int(np.min(goz)))
         z_max = min(int(np.max(goz)) + 1, input_shape[0])
-        if x_min >= x_max or\
-            y_min >= y_max or \
-            z_min >= z_max:
+        if x_min >= x_max or \
+                y_min >= y_max or \
+                z_min >= z_max:
             output_dir.write_block(np.zeros(shape_out, output_dir.dtype),
                                    start[2], start[1], start[0])
             continue
@@ -136,18 +177,23 @@ def write_level_n(opts, level):
 def main(args=sys.argv[1:]):
     opts = parse_args(args)
     prepare(opts)
-    write_level_1(opts)
+    if opts.use_gpu:
+        write_level_1_gpu(opts)
+    else:
+        write_level_1(opts)
     for directory in OUTPUT_BLOCKFS_DIRS:
         directory.close()
-    for level in range(2, opts.n_levels+1):
+    for level in range(2, opts.n_levels + 1):
         write_level_n(opts, level)
 
 
 def prepare(opts):
-    global INTERPOLATOR
-    INTERPOLATOR = pickle_load(opts.interpolator)
+    global INTERPOLATOR, GRID_VALUES
+    d = pickle_load(opts.interpolator)
+    INTERPOLATOR = d["interpolator"]
+    GRID_VALUES = d["grid_values"]
     if opts.output_shape is not None:
-        output_shape = [int(_) for _ in opts.output_shape.split(",")]
+        output_shape = [int(_) for _ in opts.output_shape.split(",")[::-1]]
     for i in range(len(opts.url)):
         INPUT_URLS.append(opts.url[i])
         info = get_info(opts.url[i])
@@ -168,7 +214,8 @@ def prepare(opts):
                         os.path.dirname(level_1_path)):
             if not os.path.isdir(dirname):
                 os.mkdir(dirname)
-        directory = Directory(xe, ye, ze, info.data_type, level_1_path,
+        directory = Directory(output_shape[2], output_shape[1], output_shape[0],
+                              info.data_type, level_1_path,
                               n_filenames=opts.n_writers)
         directory.create()
         directory.start_writer_processes()

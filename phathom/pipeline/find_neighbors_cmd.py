@@ -242,7 +242,7 @@ def main(args=sys.argv[1:]):
         PDF = matplotlib.backends.backend_pdf.PdfPages(opts.visualization_file)
     try:
         voxel_size = \
-            np.array([[float(_) for _ in opts.voxel_size.split(",")]])[::-1]
+            np.array([[float(_) for _ in opts.voxel_size.split(",")][::-1]])
     except ValueError:
         print("--voxel-size=%s must be in nnn.nnn,nnn.nnn,nnn.nnn format" %
               opts.voxel_size)

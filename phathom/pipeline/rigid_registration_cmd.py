@@ -65,7 +65,7 @@ def parse_args(args=sys.argv[1:]):
         help="the initial guess for the rotational component of the "
              "registration. Default is \"0,0,0\". The guess should "
              "be entered as "
-             "three comma-separated floating point numbers, in radians.",
+             "three comma-separated floating point numbers, in degrees.",
         default="0,0,0")
     parser.add_argument(
         "--s0",
@@ -110,6 +110,11 @@ def parse_args(args=sys.argv[1:]):
         help="If supplied, the program will display each of the visualizations "
         "as they are created. Only supply if you have a display.",
         action="store_true")
+    parser.add_argument(
+        "--manual",
+        help="If supplied, just write the input arguments and defaults as "
+        "the final registration parameters without improving the alignment"
+    )
     return parser.parse_args(args)
 
 
@@ -153,7 +158,7 @@ def main(args=sys.argv[1:]):
         print("Voxel size %s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" %
               opts.voxel_size)
         raise
-    theta0 = (theta0z, theta0y, theta0x)
+    theta0 = np.array((theta0z, theta0y, theta0x)) * np.pi / 180
     moving_down = read_url(opts.moving_url,
                            opts.moving_url_format,
                            opts.mipmap_level)
@@ -167,6 +172,12 @@ def main(args=sys.argv[1:]):
                   opts.s0)
             raise
     s0 = (s0z, s0y, s0x)
+    if opts.manual:
+        pickle_save(
+            opts.output,
+            dict(t=t0, center=s0, s=1, theta=theta0))
+        return
+
     fixed_down = read_url(opts.fixed_url,
                           opts.fixed_url_format,
                           opts.mipmap_level)
@@ -209,7 +220,8 @@ def main(args=sys.argv[1:]):
     optim_kwargs = {'niter': opts.n_iter,
                     't0': t0,
                     'theta0': theta0,
-                    's0': None if opts.no_scale else opts.s0}
+                    'center': s0,
+                    's0': None if opts.no_scale else 1}
     threshold = [tmoving, tfixed]
 
     t_down, theta, center_down, s = coarse_registration(

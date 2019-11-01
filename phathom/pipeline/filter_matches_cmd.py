@@ -154,7 +154,7 @@ def main(args=sys.argv[1:]):
 
     fixed_keypoints = fixed_pts[fixed_idx]
     moving_keypoints = moving_pts[moving_idx]
-    center = np.array(data.rigid_transform_params["center"])
+    center = np.array(data.rigid_transform_params["center"]) * voxel_size[0]
     if PDF is not None:
         figure = plot_points(fixed_keypoints, moving_keypoints, center)
         figure.suptitle("Initial matches")
@@ -222,6 +222,11 @@ def main(args=sys.argv[1:]):
     affine_keypoints_vox_dist = affine_keypoints_vox[inlier_index]
     affine_keypoints = affine_keypoints_vox / um2voxel
     affine_keypoints_dist = affine_keypoints[inlier_index]
+    if PDF is not None:
+        figure = plot_points(affine_keypoints_dist, moving_keypoints_dist,
+                             center)
+        figure.suptitle("Affine transformed keypoints")
+        PDF.savefig(figure)
     #
     # Calculate displacement coherence
     #
@@ -250,6 +255,10 @@ def main(args=sys.argv[1:]):
         figure = pyplot.figure(figsize=(6, 6))
         plotting.plot_residuals(affine_keypoints_coherent, coherent_residuals)
         figure.suptitle("Points by residual after coherence filtering")
+        PDF.savefig(figure)
+        figure = plot_points(affine_keypoints_coherent,
+                             moving_keypoints_coherent, center)
+        figure.suptitle("Coherent affine-transformed points")
         PDF.savefig(figure)
         figure = pyplot.figure(figsize=(6, 3))
         pyplot.hist(coherent_residuals, bins=128)
