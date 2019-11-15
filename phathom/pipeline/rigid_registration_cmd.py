@@ -141,12 +141,24 @@ def main(args=sys.argv[1:]):
     if opts.visualization_file is not None:
         matplotlib.interactive(opts.interactive)
         PDF = matplotlib.backends.backend_pdf.PdfPages(opts.visualization_file)
+    moving_down = read_url(opts.moving_url,
+                           opts.moving_url_format,
+                           opts.mipmap_level)
+    fixed_down = read_url(opts.fixed_url,
+                          opts.fixed_url_format,
+                          opts.mipmap_level)
+
+    full_shape = get_url_shape(opts.fixed_url, 1)
+    true_factors = full_shape / np.array(fixed_down.shape)
+    true_factors_moving = get_url_shape(opts.moving_url, 1) / \
+                          np.array(moving_down.shape)
+
     try:
         t0x, t0y, t0z = [float(_) for _ in opts.t0.split(",")]
     except ValueError:
         print("%s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" % opts.t0)
         raise
-    t0 = (t0z, t0y, t0x)
+    t0 = tuple(_ / true_factors_moving for _ in (t0z , t0y, t0x))
     try:
         theta0x, theta0y, theta0z = [float(_) for _ in opts.theta0.split(",")]
     except ValueError:
@@ -160,14 +172,12 @@ def main(args=sys.argv[1:]):
               opts.voxel_size)
         raise
     theta0 = np.array((theta0z, theta0y, theta0x)) * np.pi / 180
-    moving_down = read_url(opts.moving_url,
-                           opts.moving_url_format,
-                           opts.mipmap_level)
-    if opts.s0 == None:
+    if opts.s0 is not None:
         s0z, s0y, s0x = np.array(moving_down.shape) / 2
     else:
         try:
-            s0x, s0y, s0z = [float(_) for _ in opts.s0.split(",")]
+            s0x, s0y, s0z = [
+                float(_) / true_factors_moving for _ in opts.s0.split(",")]
         except ValueError:
             print("%s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" %
                   opts.s0)
@@ -179,9 +189,6 @@ def main(args=sys.argv[1:]):
             dict(t=t0, center=s0, s=1, theta=theta0))
         return
 
-    fixed_down = read_url(opts.fixed_url,
-                          opts.fixed_url_format,
-                          opts.mipmap_level)
     if opts.sigma != 0:
         moving_down = gaussian_filter(moving_down.astype(np.float32),
                                       (0, opts.sigma, opts.sigma))
@@ -239,8 +246,6 @@ def main(args=sys.argv[1:]):
         PDF.savefig(figure)
         if opts.interactive:
             figure.show()
-    full_shape = get_url_shape(opts.fixed_url, 1)
-    true_factors = full_shape / np.array(fixed_down.shape)
     t, center = _scale_rigid_params(t_down,
                                     center_down,
                                     true_factors)
