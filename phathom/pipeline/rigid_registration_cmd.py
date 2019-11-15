@@ -113,7 +113,8 @@ def parse_args(args=sys.argv[1:]):
     parser.add_argument(
         "--manual",
         help="If supplied, just write the input arguments and defaults as "
-        "the final registration parameters without improving the alignment"
+        "the final registration parameters without improving the alignment",
+        action="store_true"
     )
     return parser.parse_args(args)
 
