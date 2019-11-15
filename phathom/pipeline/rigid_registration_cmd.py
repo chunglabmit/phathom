@@ -154,7 +154,8 @@ def main(args=sys.argv[1:]):
                           np.array(moving_down.shape)
 
     try:
-        t0x, t0y, t0z = [float(_) / true_factors_moving for _ in opts.t0.split(",")]
+        t0x, t0y, t0z = [float(t) / f for t, f in
+                        zip(opts.t0.split(","), true_factors_moving[::-1])]
     except ValueError:
         print("%s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" % opts.t0)
         raise
@@ -177,7 +178,8 @@ def main(args=sys.argv[1:]):
     else:
         try:
             s0x, s0y, s0z = [
-                float(_) / true_factors_moving for _ in opts.s0.split(",")]
+                float(s) / f for s, f in
+                zip(opts.s0.split(","), true_factors_moving[::-1])]
         except ValueError:
             print("%s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" %
                   opts.s0)
