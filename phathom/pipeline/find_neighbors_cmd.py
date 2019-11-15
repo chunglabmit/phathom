@@ -302,6 +302,11 @@ def main(args=sys.argv[1:]):
         opts.batch_size,
         dict(max_fdist=opts.max_fdist,
              prom_thresh=opts.prom_thresh))
+    if len(idx_fixed) == 0:
+        if PDF is not None:
+            PDF.close()
+        logging.error("No matches were found. Exiting.")
+        return
     logging.info("%d matches found" % len(idx_fixed))
 
     if PDF is not None:
