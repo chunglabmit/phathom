@@ -154,11 +154,11 @@ def main(args=sys.argv[1:]):
                           np.array(moving_down.shape)
 
     try:
-        t0x, t0y, t0z = [float(_) for _ in opts.t0.split(",")]
+        t0x, t0y, t0z = [float(_) / true_factors_moving for _ in opts.t0.split(",")]
     except ValueError:
         print("%s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" % opts.t0)
         raise
-    t0 = tuple(_ / true_factors_moving for _ in (t0z , t0y, t0x))
+    t0 = (t0z , t0y, t0x)
     try:
         theta0x, theta0y, theta0z = [float(_) for _ in opts.theta0.split(",")]
     except ValueError:
