@@ -94,7 +94,8 @@ def main(args=sys.argv[1:]):
     n_coords = len(input_data.fixed_coords)
     logging.info("%d points in input" % n_coords)
 
-    random = np.random.RandomState(input_data.fixed_coords.astype(int))
+    random = np.random.RandomState(
+        input_data.fixed_coords.astype(int).flatten())
     if n_coords <= opts.max_samples:
         fixed_sample = input_data.fixed_coords
         moving_sample = input_data.moving_coords
