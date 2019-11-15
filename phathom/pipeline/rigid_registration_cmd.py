@@ -161,7 +161,7 @@ def main(args=sys.argv[1:]):
         raise
     t0 = (t0z , t0y, t0x)
     try:
-        theta0x, theta0y, theta0z = [float(_) for _ in opts.theta0.split(",")]
+        theta0x, theta0y, theta0z = [-float(_) for _ in opts.theta0.split(",")]
     except ValueError:
         print("%s must be in the form, \"nnn.nnn,nnn.nnn,nnn.nnn\"" %
               opts.theta0)
@@ -173,7 +173,7 @@ def main(args=sys.argv[1:]):
               opts.voxel_size)
         raise
     theta0 = np.array((theta0z, theta0y, theta0x)) * np.pi / 180
-    if opts.s0 is not None:
+    if opts.s0 is None:
         s0z, s0y, s0x = np.array(moving_down.shape) / 2
     else:
         try:
