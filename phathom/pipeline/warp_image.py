@@ -122,7 +122,7 @@ def write_level_1_gpu(opts):
                   output_dir.x_block_size)
         grid_values = np.array(GRID_VALUES).reshape(
             3, 1, 1, *GRID_VALUES[0].shape)
-        register(ardr, MockFixedImg(input_shape), output_dir,
+        register(ardr, MockFixedImg(GRID_SHAPE), output_dir,
                  grid_values,
                  chunks, opts.n_workers)
 
@@ -188,19 +188,20 @@ def main(args=sys.argv[1:]):
 
 
 def prepare(opts):
-    global INTERPOLATOR, GRID_VALUES
+    global INTERPOLATOR, GRID_VALUES, GRID_SHAPE
     d = pickle_load(opts.interpolator)
     INTERPOLATOR = d["interpolator"]
     GRID_VALUES = d["grid_values"]
+    GRID_SHAPE = d["grid_shape"]
     if opts.output_shape is not None:
         output_shape = [int(_) for _ in opts.output_shape.split(",")[::-1]]
+    else:
+        output_shape = GRID_SHAPE
     for i in range(len(opts.url)):
         INPUT_URLS.append(opts.url[i])
         info = get_info(opts.url[i])
         xe, ye, ze = info.get_scale(1).shape
         INPUT_SHAPES.append((ze, ye, xe))
-        if opts.output_shape is None:
-            output_shape = (ze, ye, xe)
         if opts.url_format is None or len(opts.url_format) <= i:
             INPUT_FORMATS.append("blockfs")
         else:
