@@ -267,15 +267,15 @@ def main(args=sys.argv[1:]):
     # original and the offset is rotated by the angle
     #
     logging.info("Transformation parameters:")
-    t_orig = transformation_dict['t']
-    theta_orig = transformation_dict['theta']
+    t_orig = np.asanyarray(transformation_dict['t'])
+    theta_orig = np.asanyarray(transformation_dict['theta'])
     theta = -theta_orig
-    s_orig = transformation_dict['s']
+    s_orig = np.asanyarray(transformation_dict['s'])
     r = rotation_matrix(theta)
     s = 1 / s_orig
     t = -r.dot(t_orig) * s
     logging.info("    Offset: %s" % str(t))
-    center = transformation_dict['center']
+    center = np.asanyarray(transformation_dict['center'])
     logging.info("    Center: %s" % str(center))
     logging.info("    Thetas: %s" % str(theta * 180 / np.pi))
     logging.info("    Scale: %s" % str(s))
