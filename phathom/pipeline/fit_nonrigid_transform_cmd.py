@@ -219,8 +219,8 @@ def main(args=sys.argv[1:]):
         PDF.savefig(figure)
     pickle_save(opts.output,
                 dict(interpolator=map_interpolator,
-                     grid_values=grid_values),
-                     grid_shape=fixed_shape)
+                     grid_values=grid_values,
+                     grid_shape=fixed_shape))
     if PDF is not None:
         PDF.close()
 
