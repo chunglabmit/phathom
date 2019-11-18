@@ -230,3 +230,85 @@ where
 
 * **log-level** is the log verbosity level. Default is WARNING, options
   are DEBUG, INFO, WARNING and ERROR
+
+### *phathom-warp-points*
+
+*phathom-warp-points* translates points in the fixed reference frame
+to the moving reference frame using the interpolator output by
+*phathom-fit-nonrigid-transform*
+
+```bash
+phathom-warp-points \
+    --interpolator <interpolator> \
+    --input <input> \
+    --output <output> \
+    [--n-workers <n-workers>] \
+    [--batch-size <batch-size>]
+```
+
+where
+
+* **interpolator** is the interpolator pickle output by
+*phathom-fit-nonrigid-transform*
+
+* **input** is a .json file of coordinates in the fixed frame of
+reference
+
+* **output** is the name of the output file to be written - a .json
+file of coordinates in the moving frame of reference
+
+* **n-workers** is the optional number of worker processes to use. If
+not specified, one worker is used per core.
+
+* **batch-size** is the number of coordinates per worker invocation
+
+### *phathom-warp-image*
+
+*phathom-warp-image* warps an image from the moving frame of reference
+to the fixed frame of reference using the interpolator output by
+*phathom-fit-nonrigid-transform*. The image is written as a Neuroglancer
+volume.
+
+```bash
+phathom-warp-image \
+    --interpolator <interpolator> \
+    --url <url> \
+    --output <output> \
+    [--url-format <url-format>] \
+    [--n-workers <n-workers>] \
+    [--n-writers <n-writers>] \
+    [--n-levels <n-levels>] \
+    [--output-shape <output-shape>] \
+    [--silent] \
+    [--use-gpu]
+```
+
+where
+
+* **interpolator** is the interpolator pickle file output by
+*phathom-fit-nonrigid-transform*
+
+* **url** is the neuroglancer URL of the moving image. May be specified
+          multiple times.
+* **url-format** is the format of the URL if a file URL. Must be
+          specified once per URL if specified at all. Valid values are
+          "tiff", "zarr" and "blockfs". Default is blockfs.
+
+* **output** is the location for the Neuroglancer data source for the
+          warped image. Must be specified once per input URL.
+
+* **n-workers** The number of workers devoted to transforming
+          coordinates (if --use-gpu is not specified)
+
+* **n-writers** is the number of worker processes devoted to writing
+          output data
+
+* **n-levels** is the number of levels in each output volume
+
+* **output-shape** is the output volume shape in x,y,z format. If not
+           specified, it will be the same as the shape of the first
+           input volume.
+
+* **--silent** Do not print progress bars
+
+* **--use-gpu** Use a GPU to perform the warping computation
