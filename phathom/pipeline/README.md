@@ -19,6 +19,8 @@ The steps (see below for command details):
 inspection and downsampling (see [precomputed-tif](https://github.com/chunglabmit/precomputed-tif))
 * *phathom-rigid-registration*: Perform a coarse rigid registration
 using a downsampled version of the stack.
+* OR *phathom-non-rigid-registration* Peform a coarse non-rigid
+registration using a downsampled version of the stack.
 * *detect-blobs*: Detect blobs for both the fixed and moving stacks.
 detect-blobs is part of the [eflash_2018](https://github.com/chunglabmit/eflash_2018)
 package
@@ -107,6 +109,51 @@ of reference
 of using the mask directly
 * **--interactive** show the plots as they are written to the
 visualization file
+
+### *phathom-non-rigid-registration* - coarse non-rigid registration
+
+*phathom-non-rigid-registration* is an alternative to
+*phathom-rigid-registration*. It performs a rough non-rigid registration
+using the Elastix toolkit. It is typically initialized using parameters
+from the [rigid-rotate](https://github.com/chunglabmit/rigidrotate)
+web app - this gives the application an initial starting point and may
+be neccessary if there is a large rotation or translation between the
+two images.
+
+The result is a pickled dictionary containing the transform
+function from the moving coordinate system to the fixed one.
+
+```bash
+phathom-non-rigid-registration \
+    --fixed-url <fixed-url> \
+    --moving-url <moving-url> \
+    --output <output> \
+    [--fixed-url-format <fixed-url-format>] \
+    [--moving-url-format <moving-url-format] \
+    [--mipmap-level <mipmap-level>] \
+    [--grid-points <grid-points>] \
+    [--initial-rotation <initial-rotation>] \
+    [--initial-translation <initial-translation>] \
+    [--rotation-center <rotation-center>]
+```
+where
+* **fixed-url** is the Neuroglancer URL of the fixed volume
+* **fixed-url-format** is the data format of the fixed URL if it is
+ a file URL. Valid values are "blockfs", "tiff" or "zarr".
+* **moving-url** is the Neuroglancer URL of the moving volume
+* **moving-url-format** is the data format of the moving URL if it is
+ a file URL. Valid values are "blockfs", "tiff" or "zarr".
+* **output** is the pickle file holding the interpolator
+* **mipmap-level** is the mipmap level of the downsampling,
+ e.g. 32 or 64
+* **grid-points** is the number of grid points across the image in
+ each direction
+* **initial-rotation** is the initial rotation of the moving image
+ along the X, Y and Z axes as 3 comma-separated values in degrees.
+* **rotation-center** is the rotation center from rigid-rotate,
+ the X,Y,Z values separated by commas. Default is the image center.
+* **initial-translation** is the initial translation of the moving image
+ along the X, Y and Z axes as 3 comma-separated values.
 
 ### *phathom-geometric-features* - calculate geometric features
 

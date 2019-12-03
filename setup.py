@@ -7,6 +7,8 @@ CONSOLE_SCRIPTS = [
     'phathom-score-centroids=phathom.score:main',
     'phathom-preprocess=phathom.pipeline.preprocess_cmd:main',
     'phathom-rigid-registration=phathom.pipeline.rigid_registration_cmd:main',
+    'phathom-non-rigid-registration='
+    'phathom.pipeline.non_rigid_registration_cmd:main',
     'phathom-geometric-features=phathom.pipeline.geometric_features_cmd:main',
     'phathom-find-neighbors=phathom.pipeline.find_neighbors_cmd:main',
     'phathom-filter-matches=phathom.pipeline.filter_matches_cmd:main',

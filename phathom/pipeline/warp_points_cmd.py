@@ -25,7 +25,7 @@ def parse_args(args = sys.argv[1:]):
         required=True)
     parser.add_argument(
         "--output",
-        help="The .json file of coordinates as translated to the fixed frame"
+        help="The .json file of coordinates as translated to the moving frame"
     )
     parser.add_argument(
         "--n-workers",

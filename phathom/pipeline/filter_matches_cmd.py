@@ -25,6 +25,8 @@ class FilterMatchesData:
                  fixed_coords: np.ndarray,
                  moving_coords: np.ndarray,
                  affine_coords: np.ndarray,
+                 fixed_idxs: np.ndarray,
+                 moving_idxs: np.ndarray,
                  voxel_size: typing.Sequence[float],
                  affine_transform_fn: typing.Callable[[np.ndarray], np.ndarray]):
         """
@@ -34,6 +36,10 @@ class FilterMatchesData:
         :param moving_coords: Moving coordinates surviving filtering
         :param affine_coords: Moving coordinates after affine transform into
         fixed coordinate space
+        :param fixed_idxs: the indices of the chosen fixed coordinates in the
+        original fixed coordinates array
+        :param moving_idxs: the indices of the chosen moving coordinates in the
+        original moving coordinates array
         :param voxel_size: The size of a voxel - a 3 tuple.
         :param affine_transform_fn: A function for converting from the moving
         to the fixed frame.
@@ -41,6 +47,8 @@ class FilterMatchesData:
         self.fixed_coords = fixed_coords
         self.moving_coords = moving_coords
         self.affine_coords = affine_coords
+        self.fixed_idxs = fixed_idxs
+        self.moving_idxs = moving_idxs
         self.voxel_size = voxel_size
         self.affine_transform_fn = affine_transform_fn
 
@@ -53,6 +61,8 @@ class FilterMatchesData:
             "fixed-coords": self.fixed_coords.astype(float)[:, ::-1].tolist(),
             "moving-coords": self.moving_coords.astype(float)[:, ::-1].tolist(),
             "affine-coords": self.affine_coords.astype(float)[:, ::-1].tolist(),
+            "fixed-idxs": self.fixed_idxs.astype(int).tolist(),
+            "moving-idxs": self.moving_idxs.astype(int).tolist(),
             "voxel-size": self.voxel_size[::-1],
             "affine-transform-fn": base64.b64encode(
                 pickle.dumps(self.affine_transform_fn)).decode("utf8")
@@ -76,6 +86,8 @@ class FilterMatchesData:
             np.array(d["fixed-coords"])[:, ::-1],
             np.array(d["moving-coords"])[:, ::-1],
             np.array(d["affine-coords"])[:, ::-1],
+            np.array(d["fixed-idxs"]),
+            np.array(d["moving-idxs"]),
             d["voxel-size"][::-1],
             affine_transform_fn)
 
@@ -201,6 +213,8 @@ def main(args=sys.argv[1:]):
             affine=ransac_residuals))
         df.to_csv(opts.residuals_file)
     inlier_index = np.where(ransac_residuals < opts.max_distance)
+    fixed_inlier_idx = fixed_idx[inlier_index]
+    moving_inlier_idx = moving_idx[inlier_index]
     fixed_keypoints_dist = fixed_keypoints[inlier_index]
     moving_keypoints_dist = moving_keypoints[inlier_index]
     #
@@ -243,6 +257,8 @@ def main(args=sys.argv[1:]):
     # Filter out incoherent matches
     #
     coherent_index = np.where(coherences > opts.min_coherence)[0]
+    fixed_coherent_idx = fixed_inlier_idx[coherent_index]
+    moving_coherent_idx = moving_inlier_idx[coherent_index]
     logging.info("Found %d outliers" % (len(coherences) - len(coherent_index)))
     fixed_keypoints_coherent = fixed_keypoints_dist[coherent_index]
     fixed_keypoints_coherent_vox = fixed_keypoints_coherent * um2voxel
@@ -270,6 +286,8 @@ def main(args=sys.argv[1:]):
         fixed_keypoints_coherent,
         moving_keypoints_coherent,
         affine_keypoints_coherent,
+        fixed_coherent_idx,
+        moving_coherent_idx,
         voxel_size[0].tolist(),
         affine_transformation)
     data.write(opts.output)
