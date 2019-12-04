@@ -157,6 +157,7 @@ where
 
 ### *phathom-geometric-features* - calculate geometric features
 
+usage:
 ```bash
 phathom-geometric-features \
     --input <input-path> \
@@ -176,6 +177,79 @@ is "1.8,1.8,2.0" which is the voxel size used in the Chung lab
 when imaging at 4x.
 * **n-workers** is the number of worker processes used when computing
 the geometric features.
+
+### *phathom-find-neighbors*
+
+*phathom-find-neighbors* finds correspondences between points in
+the fixed and moving volumes. It applies a transformation to the
+moving points to bring them into the fixed frame of reference and
+then does the matching based on several criteria:
+* radius - after transformation, the points must be within a given
+radius of each other
+* feature distance - The features from *phathom-geometric-features*
+for the corresponding points must match within a certain accuracy.
+* prominence threshold - the feature match must be this much better
+than the other possible matches in the neighborhood.
+
+Usage:
+```bash
+phathom-find-neighbors \
+    --fixed-coords <fixed-coords> \
+    --moving-coords <moving-coords> \
+    --fixed-features <fixed-features> \
+    --moving-features <moving-features> \
+    --output <output> \
+    [--rigid-transformation <rigid-transformation>] \
+    [--non-rigid-transformation <non-rigid-transformation>] \
+    [--voxel-size <voxel-size>] \
+    [--radius <radius>] \
+    [--max-fdist <max-fdist>] \
+    [--prom-thresh <prom-thresh>] \
+    [--n-workers <n-workers>] \
+    [--batch-size <batch-size>] \
+    [--visualization-file <visualization-file>] \
+    [--interactive] \
+    [--log-level <log-level>]
+```
+
+where
+* **fixed-coords** is the path to the blob coordinate file for the
+fixed volume. This is a .json file in x, y, z format e.g. as made by
+detect-blobs.
+* **moving-coords** is the path to the blob coordinate file for the
+moving volume. This is a .json file in x, y, z format e.g. as made by
+detect-blobs.
+* **fixed-features** is the path to the features file for the fixed
+volume, e.g. as produced by phathom-geometric-features
+* **moving-features** is the path to the features file for the moving
+volume, e.g. as produced by phathom-geometric-features
+* **rigid-transformation** is the rigid transformation to convert the
+moving coordinates to an approximation of the fixed volume space, e.g.
+as produced by phathom-rigid-registration. Either --rigid-transform
+or --non-rigid-transform must be specified.
+* **non-rigid-transformation** is the non-rigid rough transformation to
+convert moving coordinates into fixed coordinates, e.g. as produced by "
+phathom-non-rigid-registration
+* **output** is the output of this program, a JSON dictionary with the
+intermediate results to this stage.
+* **voxel-size** is the size of a voxel in microns, three
+comma-separated values in x, y, z order e.g. "1.8,1.8,2.0"
+* **radius** is the search radius for matches, in microns
+* **max-fdist** is the maximum allowed feature distance for a match
+* **prom-thresh** is the prominence threshold for a match. All competing
+matches must have a feature distance that is less than this fraction of
+the match being considered
+* **n-workers** is the number of worker processes to use during
+computation
+* **batch-size** is the number of fixed points to process per worker
+invocation
+* **visualization-file** is the path to the PDF file output by this
+program. This file contains helpful visualizations that document the
+program's progress.
+* **interactive** If supplied, the program will display each of the
+visualizations as they are created. Only supply if you have a display.
+* **log-level** is the log verbosity level. Default is WARNING, options
+are DEBUG, INFO, WARNING and ERROR
 
 ### *phathom-filter-matches*
 
