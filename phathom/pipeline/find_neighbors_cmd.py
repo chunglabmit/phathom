@@ -140,8 +140,13 @@ def parse_args(args=sys.argv[1:]):
         "--rigid-transformation",
         help="The rigid transformation to convert the moving coordinates "
         "to an approximation of the fixed volume space, e.g. as produced "
-        "by phathom-rigid-registration.",
-        required=True)
+        "by phathom-rigid-registration.")
+    parser.add_argument(
+        "--non-rigid-transformation",
+        help="The non-rigid rough transformation to convert moving coordinates "
+        "into fixed coordinates, e.g. as produced by "
+        "phathom-non-rigid-registration"
+    )
     parser.add_argument(
         "--output",
         help="The output of this program, a JSON dictionary with the "
@@ -253,7 +258,6 @@ def main(args=sys.argv[1:]):
     logging.info("Opening moving coordinate file %s" % opts.moving_coords)
     with open(opts.moving_coords) as fd:
         moving_coords = np.array(json.load(fd))[:, ::-1]
-    transformation_dict = pickle_load(opts.rigid_transformation)
     fixed_features = np.load(opts.fixed_features)
     moving_features = np.load(opts.moving_features)
     #
@@ -266,23 +270,42 @@ def main(args=sys.argv[1:]):
     # frame of reference. That means the angle is the negative of the
     # original and the offset is rotated by the angle
     #
-    logging.info("Transformation parameters:")
-    t_orig = np.asanyarray(transformation_dict['t'])
-    theta_orig = np.asanyarray(transformation_dict['theta'])
-    theta = -theta_orig
-    s_orig = np.asanyarray(transformation_dict['s'])
-    r = rotation_matrix(theta)
-    s = 1 / s_orig
-    t = -r.dot(t_orig) * s
-    logging.info("    Offset: %s" % str(t))
-    center = np.asanyarray(transformation_dict['center'])
-    logging.info("    Center: %s" % str(center))
-    logging.info("    Thetas: %s" % str(theta * 180 / np.pi))
-    logging.info("    Scale: %s" % str(s))
+    if opts.rigid_transformation is not None:
+        transformation_dict = pickle_load(opts.rigid_transformation)
+        logging.info("Transformation parameters:")
+        t_orig = np.asanyarray(transformation_dict['t'])
+        theta_orig = np.asanyarray(transformation_dict['theta'])
+        theta = -theta_orig
+        s_orig = np.asanyarray(transformation_dict['s'])
+        r = rotation_matrix(theta)
+        s = 1 / s_orig
+        t = -r.dot(t_orig) * s
+        logging.info("    Offset: %s" % str(t))
+        center = np.asanyarray(transformation_dict['center'])
+        logging.info("    Center: %s" % str(center))
+        logging.info("    Thetas: %s" % str(theta * 180 / np.pi))
+        logging.info("    Scale: %s" % str(s))
 
-    logging.info("Applying rigid transformation to moving coordinates")
-    xformed_moving_coords = rigid_transformation(
-        pts=moving_coords, t=t, r=r, center=center, s=s)
+        logging.info("Applying rigid transformation to moving coordinates")
+        xformed_moving_coords = rigid_transformation(
+            pts=moving_coords, t=t, r=r, center=center, s=s)
+        rigid_transform_params = dict(
+            t=t.astype(float).tolist(),
+            center=center.astype(float).tolist(),
+            theta=theta.astype(float).tolist(),
+            s=float(s))
+    elif opts.non_rigid_transformation is not None:
+        logging.info("Loading non-rigid transformation")
+        center = np.max(moving_coords, 0) / 2
+        rigid_transform_params = dict(center=center.astype(float).tolist())
+        non_rigid_transformation = pickle_load(opts.non_rigid_transformation)
+        nrt_fn = non_rigid_transformation["interpolator"]
+        xformed_moving_coords = nrt_fn(moving_coords)
+    else:
+        sys.stderr.write("Either --rigid-transformation or "
+                         "--non-rigid-transformation must be specified.\n"
+                         "Exiting")
+        sys.exit(-1)
     if PDF is not None:
         figure = plot_points(fixed_coords, xformed_moving_coords, center)
         figure.suptitle("Fixed and moving points after rigid transformation")
@@ -337,12 +360,7 @@ def main(args=sys.argv[1:]):
         radius=opts.radius,
         max_fdist=opts.max_fdist,
         prom_thresh=opts.prom_thresh,
-        rigid_transform_params=dict(
-            t=t.astype(float).tolist(),
-            center=center.astype(float).tolist(),
-            theta=theta.astype(float).tolist(),
-            s=float(s)
-        )
+        rigid_transform_params=rigid_transform_params
     )
     data.write(opts.output)
     if PDF is not None:

@@ -80,7 +80,7 @@ def parse_args(args=sys.argv[1:]):
 
 def get_rotate_parameters(opts, shape):
     theta_x, theta_y, theta_z = [
-        -float(_) / 180 * np.pi for _ in opts.initial_rotation.split(",")
+        float(_) / 180 * np.pi for _ in opts.initial_rotation.split(",")
     ]
     theta = np.array([theta_z, theta_y, theta_x])
     if opts.rotation_center is None:
@@ -90,7 +90,7 @@ def get_rotate_parameters(opts, shape):
             [float(_) for _ in opts.rotation_center.split(",")]
     center = np.array([center_z, center_y, center_x])
     offset_x, offset_y, offset_z = \
-        [float(_) for _ in opts.initial_translation.split(",")]
+        [-float(_) for _ in opts.initial_translation.split(",")]
     offset = np.array([offset_z, offset_y, offset_x])
     #
     # t = translation
@@ -119,9 +119,12 @@ def main(args=sys.argv[1:]):
                                0, fixed_shape[0],
                                level = opts.mipmap_level,
                                format = opts.fixed_url_format)
+        fixed_img = rigid_warp(fixed_img,
+                                output_shape=fixed_shape,
+                                **rotate_params)
         fixed_path = os.path.join(tempdir, "fixed.tiff")
         moving_path = os.path.join(tempdir, "moving.tiff")
-        fixed_points_path = os.path.join(tempdir, "fixed.json")
+        moving_points_path = os.path.join(tempdir, "moving.json")
         alignment_path = os.path.join(tempdir, "alignment.json")
         tifffile.imsave(fixed_path, fixed_img)
         del fixed_img
@@ -131,29 +134,30 @@ def main(args=sys.argv[1:]):
                                 0, moving_shape[0],
                                 level = opts.mipmap_level,
                                 format = opts.moving_url_format)
-        moving_img = rigid_warp(moving_img,
-                                output_shape=moving_shape,
-                                **rotate_params)
         tifffile.imsave(moving_path, moving_img)
         del moving_img
-        fixed_points = []
+        moving_points = []
         nb_pts = opts.grid_points
-        zs = np.linspace(0, fixed_shape[0], nb_pts)
-        ys = np.linspace(0, fixed_shape[1], nb_pts)
-        xs = np.linspace(0, fixed_shape[2], nb_pts)
+        zs = np.linspace(0, moving_shape[0], nb_pts)
+        ys = np.linspace(0, moving_shape[1], nb_pts)
+        xs = np.linspace(0, moving_shape[2], nb_pts)
         for z, y, x in itertools.product(zs, ys, xs):
-            fixed_points.append((x, y, z))
-        with open(fixed_points_path, "w") as fd:
-            json.dump(fixed_points, fd, indent=2)
+            moving_points.append((x, y, z))
+        with open(moving_points_path, "w") as fd:
+            json.dump(moving_points, fd, indent=2)
+        #
+        # The transformation we want has the opposite polarity as sitk-align
+        # so fixed becomes moving and moving, fixed
+        #
         subprocess.check_call(
             [
                 "sitk-align",
-                "--moving-file",
-                moving_path,
                 "--fixed-file",
+                moving_path,
+                "--moving-file",
                 fixed_path,
                 "--fixed-point-file",
-                fixed_points_path,
+                moving_points_path,
                 "--xyz",
                 "--transform-parameters-folder",
                 tempdir,
@@ -164,21 +168,21 @@ def main(args=sys.argv[1:]):
         with open(alignment_path, "r") as fd:
             d = json.load(fd)
         xs, ys, zs = [_ * opts.mipmap_level for _ in (xs, ys, zs)]
-        fixed_points = \
+        moving_points = \
             np.array(d["reference"]).reshape((nb_pts, nb_pts, nb_pts, 3)) * \
             opts.mipmap_level
-        moving_points = np.array(d["moving"]) * opts.mipmap_level
+        fixed_points = np.array(d["moving"]) * opts.mipmap_level
         r = rotation_matrix(full_rotate_params["thetas"])
-        moving_points = rigid_transformation(
+        fixed_points = rigid_transformation(
             full_rotate_params["t"],
             r,
-            moving_points,
+            fixed_points,
             full_rotate_params["center"])
-        moving_points = moving_points.reshape((nb_pts, nb_pts, nb_pts, 3))
-        grid_values = moving_points.transpose(3, 0, 1, 2)
-        fixed_shape_full = np.asanyarray(fixed_shape) *  opts.mipmap_level
+        fixed_points = fixed_points.reshape((nb_pts, nb_pts, nb_pts, 3))
+        grid_values = fixed_points.transpose(3, 0, 1, 2)
+        moving_shape_full = np.asanyarray(moving_shape) *  opts.mipmap_level
         map_interp = reg.fit_map_interpolator(
-            grid_values, fixed_shape_full, order=1)
+            grid_values, moving_shape_full, order=1)
         map_interpolator = \
             functools.partial(reg.interpolator, interp=map_interp)
         output = dict(
