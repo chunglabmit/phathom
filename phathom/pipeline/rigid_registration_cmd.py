@@ -1,5 +1,7 @@
 import argparse
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.backends.backend_pdf
 import matplotlib.pyplot as pylab
 from precomputed_tif.client import get_info, read_chunk

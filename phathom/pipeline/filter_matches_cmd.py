@@ -2,6 +2,8 @@ import argparse
 import base64
 import json
 import logging
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.backends.backend_pdf
 from matplotlib import pyplot
 import os

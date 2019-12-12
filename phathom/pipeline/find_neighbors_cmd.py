@@ -1,6 +1,8 @@
 import argparse
 import logging
 import json
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.backends.backend_pdf
 from matplotlib import pyplot
 import numpy as np
