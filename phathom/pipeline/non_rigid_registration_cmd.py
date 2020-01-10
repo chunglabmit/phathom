@@ -3,6 +3,7 @@ import functools
 import itertools
 import json
 import numpy as np
+from scipy.ndimage import gaussian_filter
 
 from phathom.registration.pcloud import rotation_matrix
 from precomputed_tif.client import get_info, read_chunk
@@ -75,6 +76,14 @@ def parse_args(args=sys.argv[1:]):
         "--initial-translation=-xxx,yyy,zzz",
         default="0,0,0"
     )
+    parser.add_argument(
+        "--blur-sigma",
+        help="It may be useful to blur the image if the image is of the "
+        "nuclear stain so that the registration focuses on shape rather than "
+        "any single nucleus.",
+        type=float,
+        default=1.0
+    )
     return parser.parse_args(args)
 
 
@@ -122,11 +131,13 @@ def main(args=sys.argv[1:]):
         fixed_img = rigid_warp(fixed_img,
                                 output_shape=fixed_shape,
                                 **rotate_params)
+        fixed_img = gaussian_filter(fixed_img.astype(np.float32),
+                                    opts.blur_sigma)
         fixed_path = os.path.join(tempdir, "fixed.tiff")
         moving_path = os.path.join(tempdir, "moving.tiff")
         moving_points_path = os.path.join(tempdir, "moving.json")
         alignment_path = os.path.join(tempdir, "alignment.json")
-        tifffile.imsave(fixed_path, fixed_img)
+        tifffile.imsave(fixed_path, fixed_img.astype(np.uint16))
         del fixed_img
         moving_img = read_chunk(opts.moving_url,
                                 0, moving_shape[2],
@@ -134,7 +145,9 @@ def main(args=sys.argv[1:]):
                                 0, moving_shape[0],
                                 level = opts.mipmap_level,
                                 format = opts.moving_url_format)
-        tifffile.imsave(moving_path, moving_img)
+        moving_img = gaussian_filter(moving_img.astype(np.float32),
+                                     opts.blur_sigma)
+        tifffile.imsave(moving_path, moving_img.astype(np.uint16))
         del moving_img
         moving_points = []
         nb_pts = opts.grid_points

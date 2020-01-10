@@ -27,6 +27,10 @@ def parse_args(args=sys.argv[1:]):
     parser.add_argument("--output",
                         help="Pickled nonrigid transform and grid values",
                         required=True)
+    parser.add_argument("--inverse",
+                        help="Pickled nonrigid transform and grid values "
+                        "to translate points in the moving frame of reference "
+                        "to the fixed frame")
     parser.add_argument(
         "--visualization-file",
         help="The path to the PDF file output by this program. "
@@ -116,6 +120,7 @@ def main(args=sys.argv[1:]):
         affine_sample = input_data.affine_coords[sample_idx]
     affine_sample_vox = affine_sample / voxel_size
     moving_sample_vox = moving_sample / voxel_size
+    fixed_sample_vox = fixed_sample / voxel_size
     rbf_z, rbf_y, rbf_x = reg.fit_rbf(affine_sample_vox,
                                       moving_sample_vox,
                                       opts.smoothing)
@@ -123,6 +128,14 @@ def main(args=sys.argv[1:]):
                             rbf_z=rbf_z,
                             rbf_y=rbf_y,
                             rbf_x=rbf_x)
+    if opts.inverse is not None:
+        irbf_z, irbf_y, irbf_x = reg.fit_rbf(moving_sample_vox,
+                                             fixed_sample_vox,
+                                             opts.smoothing)
+        inonrigid_transform = partial(reg.rbf_transform,
+                                 rbf_z=irbf_z,
+                                 rbf_y=irbf_y,
+                                 rbf_x=irbf_x)
     nonrigid_keypoints_vox = tps_transform(
         input_data.affine_coords / voxel_size)
     nonrigid_residuals = reg.match_distance(
@@ -191,6 +204,17 @@ def main(args=sys.argv[1:]):
         pyplot.hist(interp_residuals, bins=128)
         figure.suptitle("Interpolator residuals")
         PDF.savefig(figure)
+    if opts.inverse is not None:
+        iz = np.linspace(0, moving_shape[0], nb_pts)
+        iy = np.linspace(0, moving_shape[1], nb_pts)
+        ix = np.linspace(0, moving_shape[2], nb_pts)
+        igrid_values = reg.warp_regular_grid(nb_pts, iz, iy, ix,
+                                             inonrigid_transform)
+        imap_interp = reg.fit_map_interpolator(
+            igrid_values, moving_shape, order=1)
+        imap_interpolator = partial(reg.interpolator,
+                                    interp=imap_interp)
+
     #
     # Do the XY slice
     #
@@ -231,6 +255,11 @@ def main(args=sys.argv[1:]):
                 dict(interpolator=map_interpolator,
                      grid_values=grid_values,
                      grid_shape=fixed_shape))
+    if opts.inverse is not None:
+        pickle_save(opts.inverse,
+                    dict(interpolator=imap_interpolator,
+                         grid_values=igrid_values,
+                         grid_shape=moving_shape))
     if PDF is not None:
         PDF.close()
 
