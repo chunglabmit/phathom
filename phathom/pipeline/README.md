@@ -54,7 +54,8 @@ where
 * **input-path** is the path to the input TIFF files
 * **output-path** is the path to the directory for the output volume
 * **output-format** is the format for the output volume. Currently
-  the default and only allowable value is zarr
+  the default is tiff, other possible values are blockfs
+  and zarr
 * **threshold** is the binary threshold to use to mask the image.
 Portions of the image less than the threshold will be rendered as 0.
 * **kernel-size** is the size of the adaptation kernel used in CLAHE

@@ -2,6 +2,9 @@ import argparse
 import multiprocessing
 import numpy as np
 import os
+
+import tifffile
+
 from blockfs.directory import Directory
 from precomputed_tif.blockfs_stack import BlockfsStack
 from precomputed_tif.client import read_chunk, get_info, ArrayReader
@@ -33,6 +36,10 @@ def parse_args(args=sys.argv[1:]):
         help="The neuroglancer URL of the moving image. May be specified "
              "multiple times.",
         action="append")
+    parser.add_argument(
+        "--input-file",
+        help="A 3D tif file as an alternative image input to Neuroglancer"
+    )
     parser.add_argument(
         "--url-format",
         help="The format of the URL if a file URL. Must be specified once "
@@ -92,30 +99,32 @@ def write_level_1(opts):
             future.get()
 
 
+#
+# Register reads the fixed image to determine whether it is partially
+# in-bounds. This returns all zeros if the key is out of bounds and
+# returns a nonzero value otherwise
+#
+class MockFixedImg:
+    def __init__(self, input_shape):
+        self.input_shape = input_shape
+
+    def __getitem__(self, key):
+        for i in range(3):
+            if key[i].start >= self.input_shape[i]:
+                break
+            if key[i].stop <= 0:
+                break
+        else:
+            return np.array([1], np.uint8)
+        return np.array([0], np.uint8)
+
+
 def write_level_1_gpu(opts):
     for input_url, input_format, input_shape, output_dir in zip(
             INPUT_URLS, INPUT_FORMATS, INPUT_SHAPES, OUTPUT_BLOCKFS_DIRS):
 
         ardr = ArrayReader(input_url, input_format)
 
-        #
-        # Register reads the fixed image to determine whether it is partially
-        # in-bounds. This returns all zeros if the key is out of bounds and
-        # returns a nonzero value otherwise
-        #
-        class MockFixedImg:
-            def __init__(self, input_shape):
-                self.input_shape = input_shape
-
-            def __getitem__(self, key):
-                for i in range(3):
-                    if key[i].start >= self.input_shape[i]:
-                        break
-                    if key[i].stop <= 0:
-                        break
-                else:
-                    return np.array([1], np.uint8)
-                return np.array([0], np.uint8)
 
         chunks = (output_dir.z_block_size,
                   output_dir.y_block_size,
@@ -176,6 +185,9 @@ def write_level_n(opts, level):
 
 def main(args=sys.argv[1:]):
     opts = parse_args(args)
+    if opts.input_file is not None:
+        do_tiff(opts)
+        return
     prepare(opts)
     if opts.use_gpu:
         write_level_1_gpu(opts)
@@ -186,6 +198,21 @@ def main(args=sys.argv[1:]):
     for level in range(2, opts.n_levels + 1):
         write_level_n(opts, level)
 
+
+def do_tiff(opts):
+    moving_img = tifffile.imread(opts.input_file)
+    output_img = np.zeros_like(moving_img)
+    d = pickle_load(opts.interpolator)
+    grid_values =np.array(d["grid_values"]).reshape(
+        3, 1, 1, *d["grid_values"][0].shape)
+
+    img_shape = d["grid_shape"][::-1]
+    chunks = 3 * (128, )
+    fixed_img = MockFixedImg(img_shape)
+    register(moving_img, fixed_img, output_img, grid_values, chunks,
+             opts.n_workers)
+    tifffile.imsave(opts.output[0], output_img.astype(moving_img.dtype),
+                    compress=3)
 
 def prepare(opts):
     global INTERPOLATOR, GRID_VALUES, GRID_SHAPE

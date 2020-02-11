@@ -57,6 +57,12 @@ def parse_args(args=sys.argv[1:]):
         default=.01,
         help="The clip limit for CLAHE")
     parser.add_argument(
+        "--compression",
+        type=int,
+        default=3,
+        help="The amount of compression (0-9, default=3) for TIFF files"
+    )
+    parser.add_argument(
         "--n-workers",
         type=int,
         default=1,
@@ -77,6 +83,23 @@ def do_shmem_clahe(tiff_path, shared_memory, idx, threshold, kernel_size,
         else:
             m[idx] = enhanced.astype(shared_memory.dtype)
 
+def do_tiff_clahe(src_path,
+                  dest_path,
+                  threshold,
+                  kernel_size,
+                  clip_limit,
+                  compression):
+    img = tifffile.imread(src_path)
+    img_max = img.max()
+    img_min = img.min()
+    enhanced_normalized = clahe_2d(img, kernel_size, clip_limit)
+    enhanced = enhanced_normalized * (img_max - img_min) + img_min
+    if threshold is not None:
+        img = (enhanced * (img >= threshold)).astype(img.dtype)
+    else:
+        img = enhanced.astype(img.dtype)
+    tifffile.imsave(dest_path, img, compress=compression)
+
 
 def main(args=sys.argv[1:]):
     args = parse_args(args)
@@ -84,13 +107,22 @@ def main(args=sys.argv[1:]):
         raise ValueError("--output-format must be one of %s" % str(OF_ALL))
     paths, filenames = tifs_in_dir(args.input)
     img0 = tifffile.imread(paths[0])
-    shared_memory = SharedMemory(
-        (min(len(paths), 64), img0.shape[0], img0.shape[1]),
-        img0.dtype)
     shape = (len(paths), img0.shape[0], img0.shape[1])
     if args.output_format == OF_TIFF:
         if not os.path.exists(args.output):
             os.mkdir(args.output)
+        with multiprocessing.Pool(args.n_workers) as pool:
+            futures = []
+            for path, filename in zip(paths, filenames):
+                out_path = os.path.join(args.output, filename)
+                futures.append(pool.apply_async(
+                    do_tiff_clahe,
+                    (path, out_path, args.threshold, args.kernel_size,
+                     args.clip_limit, args.compression)
+                ))
+            for future in tqdm.tqdm(futures):
+                future.get()
+        return
     elif args.output_format == OF_BLOCKFS:
         if not os.path.exists(os.path.dirname(args.output)):
             os.mkdir(os.path.dirname(args.output))
@@ -102,6 +134,9 @@ def main(args=sys.argv[1:]):
             n_filenames = args.n_workers)
         dest.create()
         dest.start_writer_processes()
+    shared_memory = SharedMemory(
+        (min(len(paths), 64), img0.shape[0], img0.shape[1]),
+        img0.dtype)
     try:
         with multiprocessing.Pool(args.n_workers) as pool:
             for idx64 in tqdm.tqdm(range(0, len(paths), 64)):
@@ -116,13 +151,7 @@ def main(args=sys.argv[1:]):
                                      args.clip_limit))
                 pool.starmap(do_shmem_clahe, cmd_args)
                 with shared_memory.txn() as m:
-                    if args.output_format == OF_TIFF:
-                        for idx, (path, filename) in enumerate(
-                            zip(paths[idx64:idx64_end],
-                                filenames[idx64:idx64_end])):
-                            out_path = os.path.join(args.output, filename)
-                            tifffile.imsave(out_path, m[idx])
-                    elif args.output_format == OF_ZARR:
+                    if args.output_format == OF_ZARR:
                         shared_memory_to_zarr(
                             shared_memory, dest, pool, (idx64, 0, 0))
                     else:

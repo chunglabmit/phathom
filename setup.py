@@ -15,7 +15,8 @@ CONSOLE_SCRIPTS = [
     'phathom-fit-nonrigid-transform='
     'phathom.pipeline.fit_nonrigid_transform_cmd:main',
     'phathom-warp-image=phathom.pipeline.warp_image:main',
-    'phathom-warp-points=phathom.pipeline.warp_points_cmd:main'
+    'phathom-warp-points=phathom.pipeline.warp_points_cmd:main',
+    'phathom-pickle-alignment=phathom.pipeline.pickle_alignment_cmd:main'
 ]
 
 with open("./README.md") as fd:
