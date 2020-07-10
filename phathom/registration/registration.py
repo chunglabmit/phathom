@@ -9,7 +9,10 @@ from scipy.optimize import minimize, basinhopping, differential_evolution
 from scipy.ndimage import map_coordinates
 from scipy import spatial
 from scipy.interpolate import Rbf, RegularGridInterpolator
-from skimage.external import tifffile
+try:
+    import tifffile
+except:
+    from skimage.external import tifffile
 from skimage.filters import threshold_otsu
 from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import PolynomialFeatures
