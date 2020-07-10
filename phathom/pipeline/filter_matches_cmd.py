@@ -251,7 +251,10 @@ def main(args=sys.argv[1:]):
                                moving_keypoints_dist)
     if PDF is not None:
         figure = pyplot.figure(figsize=(6, 3))
-        pyplot.hist(coherences, bins=128)
+        h = pyplot.hist(coherences, bins=128)
+        hmaxbin = np.argmax(h[0])
+        pyplot.plot([opts.min_coherence, opts.min_coherence],
+                    [0, h[0][hmaxbin]])
         figure.suptitle("Distribution of displacement coherences")
         PDF.savefig((figure))
     logging.info("Average coherence: %.2f" % np.mean(coherences))

@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import logging
 import json
 import matplotlib
@@ -317,16 +318,24 @@ def main(args=sys.argv[1:]):
     moving_coords_um = moving_coords * voxel_size
 
     logging.info("Matching fixed to moving coords")
-    idx_fixed, idx_moving = radius_matching(
-        fixed_coords_um,
-        xformed_moving_coords_um,
-        fixed_features,
-        moving_features,
-        opts.radius,
-        opts.n_workers,
-        opts.batch_size,
-        dict(max_fdist=opts.max_fdist,
-             prom_thresh=opts.prom_thresh))
+    idx_fixed = []
+    idx_moving = []
+    for fidx, midx in itertools.product(range(fixed_features.shape[1]),
+                                        range(moving_features.shape[1])):
+        idx_fixed_part, idx_moving_part = radius_matching(
+            fixed_coords_um,
+            xformed_moving_coords_um,
+            fixed_features[:, fidx],
+            moving_features[:, midx],
+            opts.radius,
+            opts.n_workers,
+            opts.batch_size,
+            dict(max_fdist=opts.max_fdist,
+                 prom_thresh=opts.prom_thresh))
+        idx_fixed.append(idx_fixed_part)
+        idx_moving.append(idx_moving_part)
+    idx_fixed = np.concatenate(idx_fixed).astype(np.uint32)
+    idx_moving = np.concatenate(idx_moving).astype(np.uint32)
     if len(idx_fixed) == 0:
         if PDF is not None:
             PDF.close()
