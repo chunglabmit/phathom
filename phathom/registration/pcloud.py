@@ -1,5 +1,6 @@
 """The pcloud module contains functions related to point cloud generation and matching
 """
+import itertools
 import numpy as np
 import scipy
 from scipy.spatial.distance import cdist
@@ -124,7 +125,8 @@ def geometric_features(pts, nb_workers):
         (N, 6) array of geometric features
 
     """
-    nbrs = NearestNeighbors(n_neighbors=4, algorithm='kd_tree', n_jobs=-1).fit(pts)
+    nbrs = NearestNeighbors(n_neighbors=4, algorithm='kd_tree',
+                            n_jobs=nb_workers).fit(pts)
     distances, indices = nbrs.kneighbors(pts)
     # indices is len(pts) by 3, in order of decreasing distance
 
@@ -136,6 +138,45 @@ def geometric_features(pts, nb_workers):
         features = pool.starmap(geometric_hash, args)
 
     return np.asarray(features)
+
+def permuted_geometric_features(pts, nb_workers, n_neighbors):
+    """Extract the geometric hash for each point in a point cloud
+
+    This version takes all permutations of 3 among N nearest neighbors
+
+    Parameters
+    ----------
+    pts : ndarray
+        2D array (N, 3) of points
+    nb_workers : int
+        number of processes to calculate features in parallel
+    n_neighbors : int
+        number of nearest neighbors (3+)
+    Returns
+    -------
+    features : ndarray
+        (N, 6) array of geometric features
+
+    """
+    assert(n_neighbors >= 3)
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors+1, algorithm='kd_tree',
+                            n_jobs=nb_workers).fit(pts)
+    distances, indices = nbrs.kneighbors(pts)
+    # indices is len(pts) by n_neighbors+1, in order of decreasing distance
+    #
+    # Get all combinations
+    combinations = np.array(list(
+        itertools.combinations(range(1, n_neighbors+1), 3)))
+    combinations.sort(1)
+
+    features = []
+    with multiprocessing.Pool(processes=nb_workers) as pool:
+        for idxs in tqdm.tqdm(combinations):
+            args = []
+            for i, (center, row) in enumerate(zip(pts, indices)):
+                args.append((center, pts[row[idxs]]))
+            features.append(np.stack(pool.starmap(geometric_hash, args)))
+    return np.stack(features, 1)
 
 
 def check_distance(dists, max_dist):
