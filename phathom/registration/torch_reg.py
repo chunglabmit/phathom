@@ -238,8 +238,6 @@ def register(moving_img, fixed_img, output_img, values, chunks, nb_workers, padd
     # moving_img_ram[:] = moving_img[:]
     # moving_img_ram[:] = moving_img
 
-    print('here')
-
     start_coords = chunk_coordinates(output_img.shape, chunks)
 
     args_list = []

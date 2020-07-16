@@ -7,7 +7,7 @@ from matplotlib import pyplot
 import numpy as np
 from precomputed_tif.client import get_info, read_chunk
 from functools import partial
-from skimage.external import tifffile
+import tifffile
 from phathom.registration import registration as reg
 from phathom.pipeline.filter_matches_cmd import FilterMatchesData
 from phathom.plotting import plot_residuals
