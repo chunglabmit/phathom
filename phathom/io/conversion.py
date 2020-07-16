@@ -17,7 +17,10 @@ rechunk_zarr - copy a zarr array with new parameters
 """
 from phathom import utils
 from phathom import io
-import skimage.external.tifffile as tifffile
+try:
+    import skimage.external.tifffile as tifffile
+except:
+    import tifffile
 from skimage.transform import resize, downscale_local_mean
 import zarr
 from numcodecs import Blosc, Delta
