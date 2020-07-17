@@ -435,11 +435,13 @@ def radius_matching(points_fixed, points_moving, feat_fixed, feat_moving, radius
                 feat_moving_nearby.append(feat_moving[idxs])  # variable number of neighbors
 
             # Search each neighborhood in parallel for matches
-            result = list(tqdm.tqdm(pool.imap(_feature_matching,
-                                              zip(feat_fixed_batch,
-                                                  feat_moving_nearby,
-                                                  feat_fixed_batch.shape[0]*[matching_kwargs])),
-                                    total=int(batch_stop-batch_start),
+            result = list(tqdm.tqdm(
+                pool.imap(_feature_matching,
+                    zip(feat_fixed_batch,
+                    feat_moving_nearby,
+                    feat_fixed_batch.shape[0]*[matching_kwargs]),
+                          chunksize=1000),
+                    total=int(batch_stop-batch_start),
                                     desc="batch {}/{}".format(b+1, nb_batches),
                                     leave=False))
             # result is a list of tuples containing matching fixed and moving indices in arrays
