@@ -337,7 +337,7 @@ def feature_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None, 
     # filter on prominence
     if prom_thresh is not None and feat_moving.shape[0] > 1:
         prom = prominence(fdists[:, 0], fdists[:, 1])
-        mask = mask & prom < prom_thresh
+        mask = mask & (prom < prom_thresh)
 
     return idx_fixed[mask], idxs_moving[mask, 0]
 
