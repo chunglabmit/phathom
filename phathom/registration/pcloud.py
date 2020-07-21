@@ -330,32 +330,26 @@ def feature_matching(feat_fixed, feat_moving, max_fdist=None, prom_thresh=None, 
 
     # filter on feature distance
     if max_fdist is not None:
-        close = check_distance(fdists[:, 0], max_fdist)
-        fdists = fdists[close]
-        idxs_moving = idxs_moving[close]
-        idx_fixed = idx_fixed[close]
-        if close[0].size == 0:
-            return idx_fixed, idxs_moving[:, 0]
+        mask = fdists[:, 0] <= max_fdist
+    else:
+        mask = np.ones(len(fdists), bool)
 
     # filter on prominence
     if prom_thresh is not None and feat_moving.shape[0] > 1:
         prom = prominence(fdists[:, 0], fdists[:, 1])
-        prominent = check_prominence(prom, prom_thresh)
-        fdists = fdists[prominent]
-        idxs_moving = idxs_moving[prominent]
-        idx_fixed = idx_fixed[prominent]
+        mask = mask & prom < prom_thresh
 
-    return idx_fixed, idxs_moving[:, 0]
+    return idx_fixed[mask], idxs_moving[mask, 0]
 
 
 def _feature_matching(input_zip):
     feat_fixed, feat_moving, matching_kwargs = input_zip
     feat_fixed = feat_fixed.reshape(1, -1)
     if feat_moving.shape[0] > 0:
-        max_fdist = matching_kwargs.pop('max_fdist', None)
-        prom_thresh = matching_kwargs.pop('prom_thresh', None)
-        algorithm = matching_kwargs.pop('algorithm', 'auto')
-        n_jobs = matching_kwargs.pop('n_jobs', 1)
+        max_fdist = matching_kwargs.get('max_fdist', None)
+        prom_thresh = matching_kwargs.get('prom_thresh', None)
+        algorithm = matching_kwargs.get('algorithm', 'auto')
+        n_jobs = matching_kwargs.get('n_jobs', 1)
         matches = feature_matching(feat_fixed, feat_moving,
                                    max_fdist=max_fdist,
                                    prom_thresh=prom_thresh,
@@ -366,7 +360,10 @@ def _feature_matching(input_zip):
     return matches
 
 
-def radius_matching(points_fixed, points_moving, feat_fixed, feat_moving, radius, nb_workers=None, batch_size=None, matching_kwargs=None):
+def radius_matching(points_fixed, points_moving, feat_fixed, feat_moving,
+                    radius, nb_workers=None, batch_size=None,
+                    matching_kwargs=None,
+                    n_neighbors=100):
     """Match fixed points to moving points within a search radius
 
     Parameters
@@ -388,7 +385,7 @@ def radius_matching(points_fixed, points_moving, feat_fixed, feat_moving, radius
     matching_kwargs : dict, optional
         keyword arguments to pass to `feature_matching` for filtering the candidate matches.
         The `n_jobs` kwarg will be respected by each neighborhood worker, so the default is 1.
-
+    n_neighbors : we consider this many close neighbors when looking for correspondences.
     Returns
     -------
     idx_fixed : ndarray
@@ -406,7 +403,8 @@ def radius_matching(points_fixed, points_moving, feat_fixed, feat_moving, radius
     if matching_kwargs is None:
         matching_kwargs = {}
 
-    spatial_nbrs_moving = build_neighbors(points_moving, n_neighbors=2, radius=radius, n_jobs=-1)
+    spatial_nbrs_moving = build_neighbors(points_moving, n_neighbors=n_neighbors,
+                                          radius=radius, n_jobs=-1)
 
     nb_points_fixed = points_fixed.shape[0]
     nb_batches = int(np.ceil(nb_points_fixed / batch_size))
