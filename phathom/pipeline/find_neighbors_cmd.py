@@ -188,6 +188,12 @@ def parse_args(args=sys.argv[1:]):
         default=500000,
         type=int)
     parser.add_argument(
+        "--max-neighbors",
+        help="The best match will be selected from at most this number "
+        "of the nearest neighbors",
+        default=100,
+        type=int)
+    parser.add_argument(
         "--visualization-file",
         help="The path to the PDF file output by this program. "
         "This file contains helpful visualizations that document the "
@@ -331,7 +337,8 @@ def main(args=sys.argv[1:]):
             opts.n_workers,
             opts.batch_size,
             dict(max_fdist=opts.max_fdist,
-                 prom_thresh=opts.prom_thresh))
+                 prom_thresh=opts.prom_thresh),
+            n_neighbors=opts.max_neighbors)
         idx_fixed.append(idx_fixed_part)
         idx_moving.append(idx_moving_part)
     idx_fixed = np.concatenate(idx_fixed).astype(np.uint32)
