@@ -57,12 +57,12 @@ def main(args=sys.argv[1:]):
         fixed_points, moving_points = moving_points, fixed_points
     warper = Warper(moving_points, fixed_points)
     if opts.image_size is None:
-        image_size = np.max(fixed_points, 0)[::-1]
+        image_size = np.max(fixed_points, 0)
     else:
-        image_size = [int(_) for _ in opts.image_size.split(",")]
-    xs = np.linspace(0, image_size[0], opts.grid_size)
+        image_size = [int(_) for _ in reversed(opts.image_size.split(","))]
+    xs = np.linspace(0, image_size[2], opts.grid_size)
     ys = np.linspace(0, image_size[1], opts.grid_size)
-    zs = np.linspace(0, image_size[2], opts.grid_size)
+    zs = np.linspace(0, image_size[0], opts.grid_size)
     grid_values = warp_regular_grid(opts.grid_size, zs, ys, xs, warper)
     map_interp = fit_map_interpolator(
         grid_values, image_size, order=1)
