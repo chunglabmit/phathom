@@ -159,7 +159,7 @@ def choose_points(points_fixed, x_grid, y_grid, z_grid, shape, radius,
         [grid_z.flatten(), grid_y.flatten(), grid_x.flatten()])
 
     kdtree = KDTree(points_fixed * np.array([voxel_size]))
-    nearest_d, nearest_idx = np.array(kdtree.query(grid)).transpose()
+    nearest_d, nearest_idx = kdtree.query(grid)
     mask = nearest_d <= radius
     unique_idx = np.unique(nearest_idx[mask])
     return points_fixed[nearest_idx]
@@ -198,10 +198,15 @@ def main(args=sys.argv[1:]):
                  pool.apply_async(follow_gradient, args))
             )
         matches = []
+        corrs = []
         for pt_fixed, future in tqdm.tqdm(futures):
-            pt_moving, corr = future.get()
+            result = future.get()
+            if result is None:
+                continue
+            pt_moving, corr = result
             if corr >= opts.min_correlation:
                 matches.append((pt_fixed, pt_moving))
+                corrs.append(corr)
     fixed_coords = np.stack([pt_fixed for pt_fixed, pt_moving in matches])
     moving_coords = np.stack([pt_moving for pt_fixed, pt_moving in matches])
     idx = np.arange(len(fixed_coords))

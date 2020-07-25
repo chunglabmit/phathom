@@ -41,8 +41,11 @@ def corr(blk_fixed:np.ndarray,
     x0m, x1m = [_ + off_x - orig_moving[2] + orig_fixed[2] for _ in (x0f, x1f)]
     y0m, y1m = [_ + off_y - orig_moving[1] + orig_fixed[1] for _ in (y0f, y1f)]
     z0m, z1m = [_ + off_z - orig_moving[0] + orig_fixed[0] for _ in (z0f, z1f)]
-    return np.corrcoef(blk_fixed[z0f:z1f, y0f:y1f, x0f:x1f].flatten(),
-                       blk_moving[z0m:z1m, y0m:y1m, x0m:x1m].flatten())[1, 0]
+    fslice = blk_fixed[z0f:z1f, y0f:y1f, x0f:x1f].flatten()
+    mslice = blk_moving[z0m:z1m, y0m:y1m, x0m:x1m].flatten()
+    if np.all(mslice == mslice[0]) or np.all(fslice == fslice[0]):
+        return 0
+    return np.corrcoef(fslice, mslice)[1, 0]
 
 
 def gradient(blk_fixed:np.ndarray,
@@ -107,6 +110,8 @@ def register(amoving:ArrayReader,
     #
     mask = np.all(mgrid >= pad, 1) &\
            np.all(mgrid - pad < np.array([amoving.shape]))
+    if np.all(~ mask):
+        return
     mmgrid = mgrid[mask]
     mtgrid = tgrid[mask]
     #
@@ -118,7 +123,7 @@ def register(amoving:ArrayReader,
     pixels = ndimage.map_coordinates(
         moving_block, 
         (mmgrid - np.array([[m0z, m0y, m0x]])).transpose())
-    target[mtgrid[:, 0], mtgrid[:, 1], tgrid[:, 2]] = pixels
+    target[mtgrid[:, 0], mtgrid[:, 1], mtgrid[:, 2]] = pixels
     return target
 
 
@@ -156,14 +161,19 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
     :return: local maximum coordinates of corr coeff.
     """
     block_moving = None
+    cbest = -1
     x0m = x1m = y0m = y1m = z0m = z1m = 0
     last = np.array(pt).copy()
-    x0f = pt[2] - dx - padding_x
-    x1f = pt[2] + dx + padding_x
-    y0f = pt[1] - dy - padding_y
-    y1f = pt[1] + dy + padding_y
-    z0f = pt[0] - dz - padding_z
-    z1f = pt[0] + dz + padding_z
+    x0f = max(0, pt[2] - dx - padding_x)
+    x1f = min(afixed.shape[2], pt[2] + dx + padding_x)
+    y0f = max(pt[1] - dy - padding_y, 0)
+    y1f = min(afixed.shape[1], pt[1] + dy + padding_y)
+    z0f = max(0, pt[0] - dz - padding_z)
+    z1f = min(afixed.shape[0], pt[0] + dz + padding_z)
+    if x1f - x0f < 2 * dx + 1 or \
+        y1f - y0f < 2 * dy + 1 or \
+        z1f - z0f < 2 * dz + 1:
+        return
     orig_fixed = (z0f, y0f, x0f)
     block_fixed = ndimage.gaussian_filter(
         afixed[z0f:z1f, y0f:y1f, x0f:x1f].astype(np.float32),
@@ -178,15 +188,15 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
         y1mt = last[1] + dy + 1
         z0mt = last[0] - dz
         z1mt = last[0] + dz + 1
-        if x0mt < 0 or x1mt >= afixed.shape[2] or \
-            y0mt < 0 or y1mt >= afixed.shape[1] or \
-            z0mt < 0 or z1mt >= afixed.shape[0]:
+        if x0mt <= 0 or x1mt >= afixed.shape[2] - 1 or \
+            y0mt <= 0 or y1mt >= afixed.shape[1] - 1 or \
+            z0mt <= 0 or z1mt >= afixed.shape[0] - 1:
             # At edge, give up
-            return last
+            return last, cbest
 
-        if x0mt < x0m or x1mt >= x1m or \
-            y0mt < y0m or y1mt >= y1m or \
-            z0mt < z0m or z1mt >= z1m:
+        if x0mt - 1 < x0m or x1mt + 1 >= x1m or \
+            y0mt - 1 < y0m or y1mt + 1 >= y1m or \
+            z0mt - 1 < z0m or z1mt + 1>= z1m:
             x0m = max(0, x0mt - padding_x)
             x1m = min(x1mt + padding_x, afixed.shape[2])
             y0m = max(0, y0mt - padding_y)
@@ -197,6 +207,8 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
 
             block_moving = register(amoving, interpolator,
                                     x0m, x1m, y0m, y1m, z0m, z1m)
+            if block_moving is None:
+                return None
             block_moving = ndimage.gaussian_filter(
                 block_moving.astype(np.float32), blur)
         c = gradient(block_fixed, block_moving,
@@ -206,10 +218,10 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
                      last[2] - pt[2],
                      last[1] - pt[1],
                      last[0] - pt[0])
-        cbest = np.max(c)
-        off_z, off_y, off_x = [_[0] - 1 for _ in np.where(c == cbest)]
-        if off_z == 0 and off_y == 0 and off_x == 0:
+        cbest = np.max(c[~np.isnan(c)])
+        if c[1, 1, 1] == cbest:
             return last, cbest
+        off_z, off_y, off_x = [_[0] - 1 for _ in np.where(c == cbest)]
         last[0] += off_z
         last[1] += off_y
         last[2] += off_x
