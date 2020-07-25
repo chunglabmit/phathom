@@ -211,12 +211,13 @@ def main(args=sys.argv[1:]):
     moving_coords = np.stack([pt_moving for pt_fixed, pt_moving in matches])
     idx = np.arange(len(fixed_coords))
     fnd = FindNeighborsData(
-        fixed_coords,
-        moving_coords,
-        np.zeros_like(idx, dtype=np.float32),
-        np.zeros_like(idx, dtype=np.float32),
+        fixed_coords.astype(int).tolist(),
+        moving_coords.astype(int).tolist(),
+        [0 for _ in range(len(idx))],
+        [0 for _ in range(len(idx))],
         voxel_size,
-        idx, idx, 0, 0, 0, None
+        idx.astype(list),
+        idx.astype(list), 0, 0, 0, None
     )
     fnd.write(opts.output)
 
