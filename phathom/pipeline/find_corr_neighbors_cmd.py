@@ -209,15 +209,17 @@ def main(args=sys.argv[1:]):
                 corrs.append(corr)
     fixed_coords = np.stack([pt_fixed for pt_fixed, pt_moving in matches])
     moving_coords = np.stack([pt_moving for pt_fixed, pt_moving in matches])
+    fake_fixed_features = np.zeros((len(fixed_coords), 1, 6))
+    fake_moving_features = np.zeros((len(moving_coords), 1, 6))
     idx = np.arange(len(fixed_coords))
     fnd = FindNeighborsData(
-        fixed_coords.astype(int).tolist(),
-        moving_coords.astype(int).tolist(),
-        [0 for _ in range(len(idx))],
-        [0 for _ in range(len(idx))],
-        voxel_size,
-        idx.astype(list),
-        idx.astype(list), 0, 0, 0, None
+        fixed_coords,
+        moving_coords,
+        fake_fixed_features,
+        fake_moving_features,
+        voxel_size.reshape(3).tolist(),
+        idx,
+        idx, 0, 0, 0, None
     )
     fnd.write(opts.output)
 
