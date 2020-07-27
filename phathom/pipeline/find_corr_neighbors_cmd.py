@@ -211,8 +211,8 @@ def main(args=sys.argv[1:]):
     moving_coords_fixed_frame =\
         np.stack([pt_moving for pt_fixed, pt_moving in matches])
     moving_coords = interpolator(moving_coords_fixed_frame)
-    fixed_coords_um = fixed_coords * voxel_size.reshape(3, 1)
-    moving_coords_um = moving_coords * voxel_size.reshape(3, 1)
+    fixed_coords_um = fixed_coords * voxel_size.reshape(1, 3)
+    moving_coords_um = moving_coords * voxel_size.reshape(1, 3)
     fake_fixed_features = np.zeros((len(fixed_coords), 1, 6))
     fake_moving_features = np.zeros((len(moving_coords), 1, 6))
     idx = np.arange(len(fixed_coords))
@@ -226,6 +226,7 @@ def main(args=sys.argv[1:]):
         idx, 0, 0, 0, None
     )
     fnd.write(opts.output)
+
 
 
 if __name__ == "__main__":
