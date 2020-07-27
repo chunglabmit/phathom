@@ -32,7 +32,7 @@ def parse_arguments(args=sys.argv[1:]):
     )
     parser.add_argument(
         "--transform",
-        help="Path to the transform .pkl file",
+        help="Path to the transform .pkl file from fixed to moving",
         required=True
     )
     parser.add_argument(
@@ -168,7 +168,7 @@ def choose_points(points_fixed, x_grid, y_grid, z_grid, shape, radius,
 
 def main(args=sys.argv[1:]):
     opts = parse_arguments(args)
-    with open(opts.transform, "rb") as fd:
+    with open(opts.inverse_transform, "rb") as fd:
         interpolator = pickle.load(fd)["interpolator"]
     with open(opts.fixed_coords) as fd:
         points_fixed = np.array(json.load(fd))[:, ::-1]
@@ -208,13 +208,17 @@ def main(args=sys.argv[1:]):
                 matches.append((pt_fixed, pt_moving))
                 corrs.append(corr)
     fixed_coords = np.stack([pt_fixed for pt_fixed, pt_moving in matches])
-    moving_coords = np.stack([pt_moving for pt_fixed, pt_moving in matches])
+    moving_coords_fixed_frame =\
+        np.stack([pt_moving for pt_fixed, pt_moving in matches])
+    moving_coords = interpolator(moving_coords_fixed_frame)
+    fixed_coords_um = fixed_coords * voxel_size.reshape(3, 1)
+    moving_coords_um = moving_coords * voxel_size.reshape(3, 1)
     fake_fixed_features = np.zeros((len(fixed_coords), 1, 6))
     fake_moving_features = np.zeros((len(moving_coords), 1, 6))
     idx = np.arange(len(fixed_coords))
     fnd = FindNeighborsData(
-        fixed_coords,
-        moving_coords,
+        fixed_coords_um,
+        moving_coords_um,
         fake_fixed_features,
         fake_moving_features,
         voxel_size.reshape(3).tolist(),
