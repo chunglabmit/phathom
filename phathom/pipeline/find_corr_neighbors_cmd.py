@@ -168,7 +168,7 @@ def choose_points(points_fixed, x_grid, y_grid, z_grid, shape, radius,
 
 def main(args=sys.argv[1:]):
     opts = parse_arguments(args)
-    with open(opts.inverse_transform, "rb") as fd:
+    with open(opts.transform, "rb") as fd:
         interpolator = pickle.load(fd)["interpolator"]
     with open(opts.fixed_coords) as fd:
         points_fixed = np.array(json.load(fd))[:, ::-1]
