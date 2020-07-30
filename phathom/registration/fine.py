@@ -92,7 +92,8 @@ def gradient(blk_fixed:np.ndarray,
 def register(amoving:ArrayReader,
              interpolator:typing.Callable[[np.ndarray], np.ndarray],
              x0:int, x1:int, y0:int, y1:int, z0:int, z1:int,
-             pad=2):
+             magnification:int=1,
+             pad:int=2):
     chunks = amoving.scale.chunk_sizes
     #
     # Get several grids.
@@ -100,9 +101,11 @@ def register(amoving:ArrayReader,
     #    mgrid - coordinates in the moving frame
     #    tgrid - target coordinates in the target array
     #
-    grid = np.mgrid[z0:z1, y0:y1, x0:x1]
-    mgrid = interpolator(grid.transpose(1, 2, 3, 0).reshape(-1, 3))
-    tgrid = (grid - np.array([z0, y0, x0]).reshape(3, 1, 1, 1))\
+    lgrid = np.mgrid[z0:z1, y0:y1, x0:x1]
+    grid = lgrid * magnification
+    mgrid = interpolator(grid.transpose(1, 2, 3, 0).reshape(-1, 3)) \
+            // magnification
+    tgrid = (lgrid - np.array([z0, y0, x0]).reshape(3, 1, 1, 1))\
         .reshape(3, -1).transpose()
     target = np.zeros(grid.shape[1:], amoving.dtype)
     #
@@ -137,7 +140,8 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
                     padding_y:int,
                     padding_z:int,
                     max_rounds:int,
-                    blur:typing.Tuple[float, float, float]) ->\
+                    blur:typing.Tuple[float, float, float],
+                    level:int) ->\
         typing.Sequence[int]:
     """
     Follow the gradient towards the highest corr coeff.
@@ -158,18 +162,22 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
     :param max_rounds: exit w/o finding a maximum after this many rounds
     :param blur: blur both images by this sigma - larger blurs give more
     globally relevant maxima, smaller give more accuracy
+    :param level: retrieve images at this level: 1 = full scale, increasing
+    levels are a power of 2 magnification.
     :return: local maximum coordinates of corr coeff.
     """
     block_moving = None
+    magnification = 2 ** (level - 1)
     cbest = -1
     x0m = x1m = y0m = y1m = z0m = z1m = 0
-    last = np.array(pt).copy()
-    x0f = max(0, pt[2] - dx - padding_x)
-    x1f = min(afixed.shape[2], pt[2] + dx + padding_x)
-    y0f = max(pt[1] - dy - padding_y, 0)
-    y1f = min(afixed.shape[1], pt[1] + dy + padding_y)
-    z0f = max(0, pt[0] - dz - padding_z)
-    z1f = min(afixed.shape[0], pt[0] + dz + padding_z)
+    mpt = np.asanyarray(pt).astype(np.int32) // magnification
+    last = np.array(mpt).copy()
+    x0f = max(0, mpt[2]  - dx - padding_x)
+    x1f = min(afixed.shape[2], mpt[2]  + dx + padding_x)
+    y0f = max(mpt[1] - dy - padding_y, 0)
+    y1f = min(afixed.shape[1], mpt[1] + dy + padding_y)
+    z0f = max(0, mpt[0] - dz - padding_z)
+    z1f = min(afixed.shape[0], mpt[0] + dz + padding_z)
     if x1f - x0f < 2 * dx + 1 or \
         y1f - y0f < 2 * dy + 1 or \
         z1f - z0f < 2 * dz + 1:
@@ -192,7 +200,7 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
             y0mt <= 0 or y1mt >= afixed.shape[1] - 1 or \
             z0mt <= 0 or z1mt >= afixed.shape[0] - 1:
             # At edge, give up
-            return last, cbest
+            return last * magnification, cbest
 
         if x0mt - 1 < x0m or x1mt + 1 >= x1m or \
             y0mt - 1 < y0m or y1mt + 1 >= y1m or \
@@ -206,21 +214,22 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
             orig_moving = (z0m, y0m, x0m)
 
             block_moving = register(amoving, interpolator,
-                                    x0m, x1m, y0m, y1m, z0m, z1m)
+                                    x0m, x1m, y0m, y1m, z0m, z1m,
+                                    magnification)
             if block_moving is None:
                 return None
             block_moving = ndimage.gaussian_filter(
                 block_moving.astype(np.float32), blur)
         c = gradient(block_fixed, block_moving,
-                     pt,
+                     mpt,
                      orig_fixed, orig_moving,
                      dx, dy, dz,
-                     last[2] - pt[2],
-                     last[1] - pt[1],
-                     last[0] - pt[0])
+                     last[2] - mpt[2],
+                     last[1] - mpt[1],
+                     last[0] - mpt[0])
         cbest = np.max(c[~np.isnan(c)])
         if c[1, 1, 1] == cbest:
-            return last, cbest
+            return last * magnification, cbest
         off_z, off_y, off_x = [_[0] - 1 for _ in np.where(c == cbest)]
         last[0] += off_z
         last[1] += off_y
@@ -229,7 +238,7 @@ def follow_gradient(afixed:ArrayReader, amoving:ArrayReader,
         if last_id in pts_seen:
             return last, cbest
         pts_seen.add(last_id)
-    return last, cbest
+    return last * magnification, cbest
 
 def main():
     fixed_url = "file:///mnt/cephfs/users/lee/2020-06-26_mouse-cortex/round-2/alignment/r1c0_precomputed"

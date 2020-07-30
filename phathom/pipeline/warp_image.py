@@ -54,6 +54,7 @@ def parse_args(args=sys.argv[1:]):
     parser.add_argument(
         "--n-workers",
         help="The number of workers devoted to transforming coordinates",
+        type=int,
         default=os.cpu_count())
     parser.add_argument(
         "--n-writers",

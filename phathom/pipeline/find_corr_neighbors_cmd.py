@@ -17,8 +17,8 @@ def parse_arguments(args=sys.argv[1:]):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--fixed-coords",
-        help="Path to the blobs found in the fixed volume",
-        required=True
+        help="Path to the blobs found in the fixed volume. If this is missing, "
+        "use the grid locations directly."
     )
     parser.add_argument(
         "--fixed-url",
@@ -146,45 +146,67 @@ def parse_arguments(args=sys.argv[1:]):
         type=float,
         default=.90
     )
+    parser.add_argument(
+        "--level",
+        help="Perform alignment at this level (default = 1, others correspond "
+        "to the power of 2 of the magnification -1)",
+        type=int,
+        default=1
+    )
     return parser.parse_args(args)
 
 
 def choose_points(points_fixed, x_grid, y_grid, z_grid, shape, radius,
                   voxel_size, n_cores):
-    xs = np.linspace(0, shape[2] * voxel_size[2], x_grid)
-    ys = np.linspace(0, shape[1] * voxel_size[1], y_grid)
-    zs = np.linspace(0, shape[0] * voxel_size[0], z_grid)
-    grid_z, grid_y, grid_x = np.meshgrid(zs, ys, xs)
-    grid = np.column_stack(
-        [grid_z.flatten(), grid_y.flatten(), grid_x.flatten()])
+    grid = get_grid_points(shape, voxel_size, x_grid, y_grid, z_grid)
 
     kdtree = KDTree(points_fixed * np.array([voxel_size]))
     nearest_d, nearest_idx = kdtree.query(grid)
     mask = nearest_d <= radius
     unique_idx = np.unique(nearest_idx[mask])
-    return points_fixed[nearest_idx]
+    return points_fixed[unique_idx]
 
+
+def get_grid_points(shape, voxel_size, x_grid, y_grid, z_grid):
+    xs = np.linspace(0, shape[2] * voxel_size[2], x_grid)
+    ys = np.linspace(0, shape[1] * voxel_size[1], y_grid)
+    zs = np.linspace(0, shape[0] * voxel_size[0], z_grid)
+    grid_z, grid_y, grid_x = np.meshgrid(zs, ys, xs)
+    grid = np.column_stack(
+        [grid_z.flatten(), grid_y.flatten(), grid_x.flatten()])\
+        .astype(np.uint32)
+    return grid
 
 
 def main(args=sys.argv[1:]):
     opts = parse_arguments(args)
     with open(opts.transform, "rb") as fd:
         interpolator = pickle.load(fd)["interpolator"]
-    with open(opts.fixed_coords) as fd:
-        points_fixed = np.array(json.load(fd))[:, ::-1]
-    afixed = ArrayReader(opts.fixed_url, format="blockfs")
-    amoving = ArrayReader(opts.moving_url, format="blockfs")
+    magnification = 2 ** (opts.level - 1)
+    afixed = ArrayReader(opts.fixed_url, format="blockfs",
+                 level=magnification)
+    amoving = ArrayReader(opts.moving_url, format="blockfs",
+                 level=magnification)
     voxel_size = \
         np.array([float(_) for _ in opts.voxel_size.split(",")][::-1])
 
-    chosen_points = choose_points(points_fixed,
-                                  opts.x_grid,
-                                  opts.y_grid,
-                                  opts.z_grid,
-                                  afixed.shape,
-                                  opts.radius,
-                                  voxel_size,
-                                  opts.n_cores)
+    if opts.fixed_coords is not None:
+        with open(opts.fixed_coords) as fd:
+            points_fixed = np.array(json.load(fd))[:, ::-1]
+        chosen_points = choose_points(points_fixed,
+                                      opts.x_grid,
+                                      opts.y_grid,
+                                      opts.z_grid,
+                                      afixed.shape,
+                                      opts.radius,
+                                      voxel_size,
+                                      opts.n_cores)
+    else:
+        chosen_points = get_grid_points(afixed.shape,
+                                        voxel_size,
+                                        opts.x_grid,
+                                        opts.y_grid,
+                                        opts.z_grid)
     with multiprocessing.Pool(opts.n_cores) as pool:
         futures = []
         for pt_fixed in chosen_points:
@@ -192,7 +214,8 @@ def main(args=sys.argv[1:]):
                     opts.half_window_x, opts.half_window_y, opts.half_window_z,
                     opts.pad_x, opts.pad_y, opts.pad_z,
                     opts.max_rounds,
-                    [opts.sigma_z, opts.sigma_y, opts.sigma_x])
+                    [opts.sigma_z, opts.sigma_y, opts.sigma_x],
+                    opts.level)
             futures.append(
                 (pt_fixed,
                  pool.apply_async(follow_gradient, args))
@@ -204,9 +227,9 @@ def main(args=sys.argv[1:]):
             if result is None:
                 continue
             pt_moving, corr = result
+            corrs.append(corr)
             if corr >= opts.min_correlation:
                 matches.append((pt_fixed, pt_moving))
-                corrs.append(corr)
     fixed_coords = np.stack([pt_fixed for pt_fixed, pt_moving in matches])
     moving_coords_fixed_frame =\
         np.stack([pt_moving for pt_fixed, pt_moving in matches])
@@ -223,7 +246,9 @@ def main(args=sys.argv[1:]):
         fake_moving_features,
         voxel_size.reshape(3).tolist(),
         idx,
-        idx, 0, 0, 0, None
+        idx, 0, 0, 0, dict(
+            center=afixed.shape
+        )
     )
     fnd.write(opts.output)
 
