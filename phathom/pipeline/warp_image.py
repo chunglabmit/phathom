@@ -162,12 +162,12 @@ def do_chunk(start):
         shape_out = output_dir.get_block_size(start[2], start[1], start[0])
         goz, goy, gox = [a[:shape_out[0], :shape_out[1], :shape_out[2]]
                          for a in (grid_out_z, grid_out_y, grid_out_x)]
-        x_min = max(0, int(np.min(gox)))
-        x_max = min(int(np.max(gox)) + 1, input_shape[2])
-        y_min = max(0, int(np.min(goy)))
-        y_max = min(int(np.max(goy)) + 1, input_shape[1])
-        z_min = max(0, int(np.min(goz)))
-        z_max = min(int(np.max(goz)) + 1, input_shape[0])
+        x_min = max(0, int(np.min(gox) - 1))
+        x_max = min(int(np.max(gox)) + 2, input_shape[2])
+        y_min = max(0, int(np.min(goy)) - 1)
+        y_max = min(int(np.max(goy)) + 2, input_shape[1])
+        z_min = max(0, int(np.min(goz)) - 1)
+        z_max = min(int(np.max(goz)) + 2, input_shape[0])
         if x_min >= x_max or \
                 y_min >= y_max or \
                 z_min >= z_max:
