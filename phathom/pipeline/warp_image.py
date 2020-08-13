@@ -85,8 +85,7 @@ def parse_args(args=sys.argv[1:]):
     parser.add_argument(
         "--voxel-size",
         help="The x, y and z size of a voxel in the fixed volume. "
-        "Specify as three comma-separated values in x,y,z format.",
-        default
+        "Specify as three comma-separated values in x,y,z format."
     )
     return parser.parse_args(args)
 
