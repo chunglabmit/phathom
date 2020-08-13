@@ -82,6 +82,12 @@ def parse_args(args=sys.argv[1:]):
         help="Use a GPU to perform the warping computation",
         action="store_true"
     )
+    parser.add_argument(
+        "--voxel-size",
+        help="The x, y and z size of a voxel in the fixed volume. "
+        "Specify as three comma-separated values in x,y,z format.",
+        default
+    )
     return parser.parse_args(args)
 
 
@@ -235,7 +241,12 @@ def prepare(opts):
         else:
             INPUT_FORMATS.append(opts.url_format[i])
         stack = BlockfsStack(output_shape, opts.output[i])
-        stack.write_info_file(opts.n_levels)
+        if opts.voxel_size is not None:
+            xum, yum, zum = \
+                [int(float(_) * 1000) for _ in  opts.voxel_size.split(",")]
+            stack.write_info_file(opts.n_levels, voxel_size=(xum, yum, zum))
+        else:
+            stack.write_info_file(opts.n_levels)
         OUTPUT_STACKS.append(stack)
         level_1_path = os.path.join(opts.output[i], "1_1_1",
                                     BlockfsStack.DIRECTORY_FILENAME)
