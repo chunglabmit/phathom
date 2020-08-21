@@ -222,7 +222,7 @@ def plot_points(fixed_coords, moving_coords, center):
     return figure
 
 
-def cull_pts(coords, center, axis, count):
+def cull_pts(coords, center, axis, count, return_indices = False):
     """
     Return the "count" closest points to the center in the given dimension
 
@@ -230,12 +230,17 @@ def cull_pts(coords, center, axis, count):
     :param center: the center of the volume
     :param axis: the axis that is orthogonal to the plane being displayed
     :param count: the maximum number of coordinates to return
+    :param return_indices: if True, return the indices used to select coordinates
     :return: a count x 2 array of the coordinates to display
     """
     idx = np.argsort(np.abs(center[axis] - coords[:, axis]))
     if len(idx) > count:
-        coords = coords[idx[:count]]
-    return np.column_stack([coords[:, i] for i in range(3) if i != axis])
+        idx = idx[:count]
+        coords = coords[idx]
+    result = np.column_stack([coords[:, i] for i in range(3) if i != axis])
+    if return_indices:
+        return result, idx
+    return result
 
 
 def plot_axis(ax, center, fixed_coords, moving_coords, axis):

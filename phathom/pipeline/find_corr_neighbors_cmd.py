@@ -1,5 +1,9 @@
 import argparse
 import pickle
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.backends.backend_pdf
+from matplotlib import pyplot
 import multiprocessing
 import numpy as np
 import json
@@ -11,7 +15,8 @@ from scipy.spatial import KDTree
 
 from precomputed_tif.client import ArrayReader
 from phathom.registration.fine import follow_gradient
-from phathom.pipeline.find_neighbors_cmd import FindNeighborsData
+from phathom.pipeline.find_neighbors_cmd import FindNeighborsData, cull_pts
+from phathom.pipeline.find_neighbors_cmd import plot_points as fm_plot_points
 
 def parse_arguments(args=sys.argv[1:]):
     parser = argparse.ArgumentParser()
@@ -40,6 +45,11 @@ def parse_arguments(args=sys.argv[1:]):
         help="Name of the output file - a JSON dictionary of results",
         required=True
     )
+    parser.add_argument(
+        "--visualization-file",
+        help="The path to the PDF file output by this program. "
+        "This file contains helpful visualizations that document the "
+        "program's progress.")
     parser.add_argument(
         "--x-grid",
         help="Dimensions of the point grid in the X direction",
@@ -180,6 +190,11 @@ def get_grid_points(shape, voxel_size, x_grid, y_grid, z_grid):
 
 def main(args=sys.argv[1:]):
     opts = parse_arguments(args)
+    if opts.visualization_file is not None:
+        matplotlib.interactive(False)
+        PDF = matplotlib.backends.backend_pdf.PdfPages(opts.visualization_file)
+    else:
+        PDF = None
     with open(opts.transform, "rb") as fd:
         interpolator = pickle.load(fd)["interpolator"]
     magnification = 2 ** (opts.level - 1)
@@ -207,6 +222,10 @@ def main(args=sys.argv[1:]):
                                         opts.x_grid,
                                         opts.y_grid,
                                         opts.z_grid)
+    if PDF is not None:
+        figure = plot_points(chosen_points)
+        figure.suptitle("Fixed points")
+        PDF.savefig(figure)
     with multiprocessing.Pool(opts.n_cores) as pool:
         futures = []
         for pt_fixed in chosen_points:
@@ -230,9 +249,21 @@ def main(args=sys.argv[1:]):
             corrs.append(corr)
             if corr >= opts.min_correlation:
                 matches.append((pt_fixed, pt_moving))
+    if PDF is not None:
+        figure:pyplot.Figure = pyplot.figure(figsize=(6, 6))
+        ax = figure.add_subplot(1, 1, 1)
+        counts = ax.hist(corrs, bins=100)[0]
+        ax.plot([opts.min_correlation, opts.min_correlation], [0, np.max(counts)])
+        figure.suptitle("Histogram of correlations")
+        PDF.savefig(figure)
     fixed_coords = np.stack([pt_fixed for pt_fixed, pt_moving in matches])
     moving_coords_fixed_frame =\
         np.stack([pt_moving for pt_fixed, pt_moving in matches])
+    if PDF is not None and len(fixed_coords) > 0:
+        center = np.median(fixed_coords, 0)
+        figure = fm_plot_points(fixed_coords, moving_coords_fixed_frame, center)
+        figure.suptitle("Alignment")
+        PDF.savefig(figure)
     moving_coords = interpolator(moving_coords_fixed_frame)
     fixed_coords_um = fixed_coords * voxel_size.reshape(1, 3)
     moving_coords_um = moving_coords * voxel_size.reshape(1, 3)
@@ -251,8 +282,21 @@ def main(args=sys.argv[1:]):
         )
     )
     fnd.write(opts.output)
+    if PDF is not None:
+        PDF.close()
 
 
+def plot_points(points:np.ndarray, values:np.ndarray=None)->pyplot.Figure:
+    figure = pyplot.figure(figsize=(6, 6))
+    center = np.median(points, 0)
+    for coord_idx, axis_idx in ((2, 1), (1, 2), (0, 4)):
+        pts, idxs = cull_pts(points, center, coord_idx, 2000, return_indices=True)
+        ax = figure.add_subplot(2, 2, axis_idx)
+        if values is None:
+            ax.scatter(pts[:, 1], pts[:, 0])
+        else:
+            ax.scatter(pts[:, 1], pts[:, 0], c=values[idxs])
+    return figure
 
 if __name__ == "__main__":
     main()
