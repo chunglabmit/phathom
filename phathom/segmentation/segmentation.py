@@ -1,3 +1,5 @@
+import typing
+
 from phathom.segmentation import partition
 from phathom.segmentation import graphcuts
 from phathom import utils
@@ -500,6 +502,52 @@ def watershed_centers_parallel(prob, centers, mask, output, chunks, overlap, nb_
                 mask=mask,
                 overlap=overlap)
     utils.pmap_chunks(f, prob, chunks, nb_workers, use_imap=True)
+
+def detect_blobs(a:np.ndarray,
+                 zyxmin:typing.Tuple[int, int, int],
+                 zyxmax:typing.Tuple[int, int, int],
+                 pad:typing.Tuple[int, int, int],
+                 sigma_low:typing.Tuple[float, float, float],
+                 sigma_high:typing.Tuple[float, float, float],
+                 threshold:float,
+                 min_distance:float) -> np.ndarray:
+    """
+    Detect blobs using the local maxima of a difference of gaussians. This is an alternative to the curvature
+    approach.
+
+    :param a: Detect blobs within this array. Although typed as an ndarray, ZARR or Neuroglancer precomputed
+    ArrayReader will work.
+    :param zyxmin: a 3-tuple of z0, y0 and x0 for the slice to be processed
+    :param zyxmax: a 3-tuple of z1, y1 and x1 for the slice to be processed
+    :param pad: amount of padding for the block to be processed
+    :param sigma_low: the standard deviation for the foreground of the difference of gaussians.
+    :param sigma_high: the standard deviation for the background of the difference of gaussians.
+    :param threshold: the threshold cutoff for a local maximum
+    :param min_distance: the distance a local maximum must be from a value of higher intensity
+    :return: an N x 3 array of blob coordinates.
+    """
+    z0, y0, x0 = zyxmin
+    z1, y1, x1 = zyxmax
+    z0p, y0p, x0p = [max(0, a - b) for a, b in zip(zyxmin, pad)]
+    z1p, y1p, x1p = [min(s, a + b) for s, a, b in zip(a.shape, zyxmax, pad)]
+    block = a[z0p:z1p, y0p:y1p, x0p:x1p].astype(np.float32)
+    dog = ndi.gaussian_filter(block, sigma_low) - ndi.gaussian_filter(block, sigma_high)
+    iradius_z, iradius_y, iradius_x = [int(np.ceil(_)) for _ in min_distance]
+    grid = np.mgrid[-iradius_z:iradius_z + 1, -iradius_y:iradius_y + 1, -iradius_x:iradius_x + 1]
+    footprint = np.sqrt(np.sum(np.square(grid / np.array(min_distance).reshape(3, 1, 1, 1)), 0)) <= 1
+    mask = (ndi.grey_dilation(dog, footprint=footprint) == dog) & (dog > threshold)
+    l, c = ndi.label(mask)
+    if c == 0:
+        return np.zeros((0, 3))
+    z, y, x = np.where(l > 0)
+    area = np.bincount(l[z, y, x])
+    idx = np.where(area > 0)[0]
+    area = area[idx]
+    xc = np.bincount(l[z, y, x], weights=x)[idx] / area + x0p
+    yc = np.bincount(l[z, y, x], weights=y)[idx] / area + y0p
+    zc = np.bincount(l[z, y, x], weights=z)[idx] / area + z0p
+    mask = (xc >= x0) & (xc < x1) & (yc >= y0) & (yc < y1) & (zc >= z0) & (zc < z1)
+    return np.column_stack((zc[mask], yc[mask], xc[mask]))
 
 
 def _add_parser_args(parser):

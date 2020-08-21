@@ -17,7 +17,8 @@ CONSOLE_SCRIPTS = [
     'phathom-warp-image=phathom.pipeline.warp_image:main',
     'phathom-warp-points=phathom.pipeline.warp_points_cmd:main',
     'phathom-pickle-alignment=phathom.pipeline.pickle_alignment_cmd:main',
-    'phathom-find-corr-neighbors=phathom.pipeline.find_corr_neighbors_cmd:main'
+    'phathom-find-corr-neighbors=phathom.pipeline.find_corr_neighbors_cmd:main',
+    'phathom-detect-blobs=phathom.pipeline.detect_blobs:main'
 ]
 
 with open("./README.md") as fd:
