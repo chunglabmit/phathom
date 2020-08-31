@@ -97,7 +97,7 @@ def main(args=sys.argv[1:]):
         coords = []
         for future in tqdm.tqdm(futures):
             coords.append(future.get())
-    coords = np.concatenate(coords, 0).tolist()
+    coords = np.concatenate(coords, 0)[:, ::-1].tolist()
     with open(opts.output, "w") as fd:
         json.dump(coords, fd)
 
