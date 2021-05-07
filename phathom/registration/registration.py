@@ -1,3 +1,4 @@
+import uuid
 from itertools import product
 from functools import partial
 import numpy as np
@@ -689,11 +690,42 @@ def nonrigid_transform(pts, affine_transform, rbf_z, rbf_y, rbf_x):
     affine_pts = affine_transform(pts)
     return rbf_transform(affine_pts, rbf_z, rbf_y, rbf_x)
 
+TRANSFORMS = {}
+GRIDS = {}
 
-def warp_regular_grid(np_pts, z, y, x, transform):
+def wrg_transform(my_uuid, start, end):
+    transform = TRANSFORMS[my_uuid]
+    grid = GRIDS[my_uuid]
+    return transform(grid[start:end])
+
+def warp_regular_grid(np_pts, z, y, x, transform, n_processes=1,
+                      chunk_size=250):
     Z, Y, X = np.meshgrid(z, y, x, indexing='ij')
     grid = np.column_stack([Z.ravel(), Y.ravel(), X.ravel()])
-    values = transform(grid)
+    if n_processes == 1:
+        values = transform(grid)
+    else:
+        my_uuid = uuid.uuid4()
+        TRANSFORMS[my_uuid] = transform
+        GRIDS[my_uuid] = grid
+        try:
+            n_grid = len(grid)
+            my_chunk_size = min((n_grid + n_processes - 1) // n_processes,
+                                chunk_size)
+            starts = np.arange(0, n_grid, my_chunk_size)
+            ends = np.concatenate((starts[1:], [n_grid]))
+            with multiprocessing.Pool(n_processes) as pool:
+                futures = []
+                for start, end in zip(starts, ends):
+                    future = pool.apply_async(transform, (grid[start:end],))
+                    futures.append(future)
+                values = []
+                for future in tqdm.tqdm(futures):
+                    values.append(future.get())
+        finally:
+            del TRANSFORMS[my_uuid]
+            del GRIDS[my_uuid]
+        values = np.concatenate(values)
     grid_shape = values.shape[-1] * (np_pts,)  # If same # for each
     values_z = np.reshape(values[:, 0], grid_shape)
     values_y = np.reshape(values[:, 1], grid_shape)

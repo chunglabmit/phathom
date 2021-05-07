@@ -1,5 +1,7 @@
 import argparse
 import logging
+import multiprocessing
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.backends.backend_pdf
@@ -89,6 +91,12 @@ def parse_args(args=sys.argv[1:]):
         help="The log verbosity level. Default is WARNING, options are "
         "DEBUG, INFO, WARNING and ERROR",
         default="WARNING")
+    parser.add_argument(
+        "--n-workers",
+        help="# of processes to use",
+        type=int,
+        default=multiprocessing.cpu_count()
+    )
     return parser.parse_args(args)
 
 
@@ -165,7 +173,9 @@ def main(args=sys.argv[1:]):
     z = np.linspace(0, fixed_shape[0], nb_pts)
     y = np.linspace(0, fixed_shape[1], nb_pts)
     x = np.linspace(0, fixed_shape[2], nb_pts)
-    grid_values = reg.warp_regular_grid(nb_pts, z, y, x, nonrigid_transform)
+    n_workers = max(1, opts.n_workers)
+    grid_values = reg.warp_regular_grid(
+        nb_pts, z, y, x, nonrigid_transform, n_workers)
     if PDF is not None:
         figure = pyplot.figure(figsize=(6, 6))
         #
