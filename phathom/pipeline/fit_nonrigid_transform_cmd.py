@@ -218,7 +218,8 @@ def main(args=sys.argv[1:]):
         iy = np.linspace(0, moving_shape[1], nb_pts)
         ix = np.linspace(0, moving_shape[2], nb_pts)
         igrid_values = reg.warp_regular_grid(nb_pts, iz, iy, ix,
-                                             inonrigid_transform)
+                                             inonrigid_transform,
+                                             n_workers)
         imap_interp = reg.fit_map_interpolator(
             igrid_values, moving_shape, order=1)
         imap_interpolator = partial(reg.interpolator,
