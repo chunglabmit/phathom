@@ -34,5 +34,5 @@ Phathom supports HPC environments using [SLURM][5].
 ## Release
 Phathom is released as an open-source package on October, 2021, and maintained by members of the [Kwanghun Chung Lab](http://www.chunglab.org/) at MIT.
 * Original Author: Justin Swaney
-* Primary Contack: Lee Kamensky (lkaments@mit.edu)
+* Primary Contact: Lee Kamensky (lkaments@mit.edu)
 
