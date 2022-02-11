@@ -73,6 +73,11 @@ def parse_args(args=sys.argv[1:]):
              "will be the same as the shape of the first input volume."
     )
     parser.add_argument(
+        "--offset",
+        help="Offset of the volume to be produced in x,y,z format.",
+        default="0,0,0"
+    )
+    parser.add_argument(
         "--silent",
         help="Do not print progress bars",
         action="store_true"
@@ -223,7 +228,17 @@ def do_tiff(opts):
 def prepare(opts):
     global INTERPOLATOR, GRID_VALUES, GRID_SHAPE
     d = pickle_load(opts.interpolator)
-    INTERPOLATOR = d["interpolator"]
+    interpolator = d["interpolator"]
+    #
+    # We create an interpolator that pre-adds the offset to the fixed-coords
+    # so that asking for 0,0,0 turns into asking for the offset
+    #
+    xoff, yoff, zoff = [int(_) for _ in opts.offset.split(",")]
+    offset = np.array([[zoff, yoff, xoff]])
+    def offset_interpolator(coords):
+        return interpolator(coords + offset)
+    INTERPOLATOR = offset_interpolator
+    #
     GRID_VALUES = d["grid_values"]
     GRID_SHAPE = d["grid_shape"]
     if opts.output_shape is not None:

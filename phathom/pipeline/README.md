@@ -401,6 +401,7 @@ phathom-warp-image \
     [--n-writers <n-writers>] \
     [--n-levels <n-levels>] \
     [--output-shape <output-shape>] \
+    [--offset <offset>] \
     [--silent] \
     [--use-gpu]
 ```
@@ -430,6 +431,9 @@ where
 * **output-shape** is the output volume shape in x,y,z format. If not
            specified, it will be the same as the shape of the first
            input volume.
+
+* **offset** is the offset of the cutout volume in x,y,z format. If
+             not specified, it will be 0,0,0.
 
 * **--silent** Do not print progress bars
 
