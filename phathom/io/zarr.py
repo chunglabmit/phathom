@@ -5,7 +5,6 @@ import zarr
 from numcodecs import Blosc, Zstd
 from skimage.transform import downscale_local_mean
 from skimage.measure import block_reduce
-from skimage.util import pad
 import tqdm
 from phathom import utils
 
