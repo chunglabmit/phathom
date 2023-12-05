@@ -535,7 +535,7 @@ def estimate_affine(batch_stationary, batch_moving, mode='ransac', min_samples=4
     A = augmented_matrix(batch_stationary)
     if mode == 'ransac':
         ransac = linear_model.RANSACRegressor(min_samples=min_samples,
-                                              loss='absolute_loss',
+                                              loss='absolute_error',
                                               residual_threshold=residual_threshold).fit(A, b)
         inlier_mask = unflatten(ransac.inlier_mask_)
         inlier_idx = np.where(inlier_mask.any(axis=-1))[0]
