@@ -100,7 +100,6 @@ def intensity_probability(image, I0=None, stdev=None):
     normalized = image / I0
     if stdev is None:
         stdev = normalized.std()
-        print(stdev)
     return 1 - np.exp(-normalized ** 2 / (2 * stdev ** 2))
 
 
@@ -129,7 +128,7 @@ def nucleus_probability(image, sigma, steepness=500, offset=0.0005, I0=None, std
     eigvals = calculate_eigvals(g)
     p_curvature = curvature_probability(eigvals, steepness, offset)
     p_intensity = intensity_probability(g, I0, stdev)
-    return p_curvature * p_intensity
+    return p_curvature, p_intensity, p_curvature * p_intensity
 
 
 def nuclei_centers_ncp(image, sigma, **plm_kwargs):
