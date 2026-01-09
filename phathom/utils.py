@@ -207,11 +207,14 @@ def extract_box(arr, start, stop):
 
     """
     idx = box_slice_idx(start, stop)
-    if isinstance(arr, SharedMemory):
+    is_instance = isinstance(arr, SharedMemory)
+    if is_instatnce:
         with arr.txn() as a:
             box = a[idx]
     else:
         box = arr[idx]
+
+    
     return box
 
 
@@ -567,3 +570,4 @@ def memory_to_blockfs(memory, blockfs_dir, offset, start=None, stop=None):
         chunksize, shape, start, stop)):
         blockfs_dir.write_block(memory[z0:z1, y0:y1, x0:x1],
                                 x0 + offset[2], y0+offset[1], z0+offset[0])
+

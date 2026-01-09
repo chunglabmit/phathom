@@ -11,7 +11,7 @@ from phathom import utils
 
 def open(path, nested=True, mode='a'):
     if nested:
-        store = zarr.NestedDirectoryStore(path)
+        store = zarr.storage.NestedDirectoryStore(path)
         return zarr.open(store, mode=mode)
     else:
         return zarr.open(path, mode=mode)
@@ -20,7 +20,7 @@ def open(path, nested=True, mode='a'):
 def new_zarr(path, shape, chunks, dtype, **kwargs):
     compressor = Blosc(cname='zstd', clevel=1, shuffle=Blosc.BITSHUFFLE)
     # compressor = Zstd(level=1)
-    store = zarr.NestedDirectoryStore(path)
+    store = zarr.storage.NestedDirectoryStore(path)
     z_arr_out = zarr.open(store,
                           mode='w',
                           shape=shape,
