@@ -55,7 +55,7 @@ class Preprocessor(Callable):
         self.thread_used = threading.currentThread().getName()
         try:
             self.result = process_image(self.input_path, self.output_path)
-        except Exception, ex:
+        except Exception as ex:
             self.exception = ex
         return self
 
@@ -67,7 +67,7 @@ def shutdown_and_await_termination(pool, timeout):
 			pool.shutdownNow()
 			if (not pool.awaitTermination(timeout, TimeUnit.SECONDS)):
 				print >> sys.stderr, "Pool did not terminate"
-	except InterruptedException, ex:
+	except InterruptedException as ex:
 		pool.shutdownNow()
 		Thread.currentThread().interrupt()
         
