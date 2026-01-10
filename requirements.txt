@@ -11,4 +11,5 @@ tqdm
 pandas
 git+git://github.com/chunglabmit/precomputed-tif/master/archive.zip#egg=precomputed-tif
 tifffile
-lapsolver
+lap
+lapx
